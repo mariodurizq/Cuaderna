@@ -8,7 +8,7 @@ Contabilidad, facturación y gestión para autónomos y pequeñas empresas en un
 2. Ábrelo con Chrome, Edge o Firefox.
 3. Pulsa **Empezar en blanco** y rellena los datos de la empresa en **Ajustes y copias**.
 
-Los datos se guardan solo en el navegador de ese ordenador. Exporta una copia de seguridad (`Ajustes y copias → Exportar copia`) cada día que trabajes.
+Los datos se guardan solo en el navegador de ese ordenador. Exporta una copia de seguridad (`Ajustes y copias → Exportar todas las empresas`) cada día que trabajes.
 
 El manual completo está en [`Manual-Cuaderna.pdf`](Manual-Cuaderna.pdf).
 
@@ -20,6 +20,8 @@ El manual completo está en [`Manual-Cuaderna.pdf`](Manual-Cuaderna.pdf).
 - Contabilidad: asientos automáticos y manuales, diario, mayor, balances, activos fijos, presupuesto, analítica y cierre.
 - Fiscal: resumen orientativo de los modelos 303, 130, 111 y 347.
 - Proyectos, empleados y asiento de nóminas.
+- Varias empresas en el mismo programa, cada una con sus datos.
+- Libros registro de IVA, exportación de informes a CSV e importación de facturas desde CSV.
 - Modo claro y oscuro.
 
 ## Avisos
@@ -27,4 +29,4 @@ El manual completo está en [`Manual-Cuaderna.pdf`](Manual-Cuaderna.pdf).
 - Los cálculos de impuestos son orientativos. El programa no presenta nada ante la Agencia Tributaria.
 - No es un programa de facturación homologado (Verifactu, SII).
 - No calcula nóminas legales.
-- Pensado para una persona en un ordenador.
+- Pensado para una persona en un ordenador (puede llevar varias empresas).
