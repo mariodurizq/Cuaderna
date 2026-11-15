@@ -17,8 +17,8 @@ El manual completo está en [`Manual-Cuaderna.pdf`](Manual-Cuaderna.pdf).
 - Ventas: ofertas, pedidos, albaranes, facturas, contratos periódicos y oportunidades.
 - Compras y almacén: pedidos, albaranes, facturas recibidas, artículos, stock y fabricación sencilla.
 - Tesorería: cobros y pagos, cartera por vencimientos, bancos y conciliación con extracto CSV.
-- Contabilidad: asientos automáticos y manuales, diario, mayor, balances, activos fijos, presupuesto, analítica y cierre.
-- Fiscal: resumen orientativo de los modelos 303, 130, 111 y 347.
+- Contabilidad: asientos automáticos y manuales con plantillas, diario, mayor, balance y pérdidas y ganancias con el modelo de pymes y comparación con el año anterior, activos fijos, presupuesto, analítica, y cierre y apertura del ejercicio.
+- Fiscal: resumen orientativo de los modelos 303, 130, 111 y 115 y de los anuales 390, 190, 180 y 347.
 - Proyectos, empleados y asiento de nóminas.
 - Varias empresas en el mismo programa, cada una con sus datos.
 - Libros registro de IVA, exportación de informes a CSV e importación de facturas desde CSV.
