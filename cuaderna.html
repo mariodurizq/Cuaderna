@@ -125,17 +125,20 @@ label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600;
 /*CORE-START*/
 const r2=n=>Math.round((n+Number.EPSILON)*100)/100;
 const pad=(n,l)=>String(n).padStart(l,'0');
-const PGC=[["100","Capital social"],["102","Capital"],["129","Resultado del ejercicio"],["170","Deudas a largo plazo con entidades de crédito"],
+const PGC=[["100","Capital social"],["102","Capital"],["112","Reserva legal"],["113","Reservas voluntarias"],["120","Remanente"],["121","Resultados negativos de ejercicios anteriores"],["129","Resultado del ejercicio"],["170","Deudas a largo plazo con entidades de crédito"],
 ["213","Maquinaria"],["216","Mobiliario"],["217","Equipos para procesos de información"],["218","Elementos de transporte"],["281","Amortización acumulada del inmovilizado material"],
 ["300","Mercaderías"],["400","Proveedores"],["410","Acreedores por prestaciones de servicios"],["430","Clientes"],["465","Remuneraciones pendientes de pago"],["4700","HP, deudora por IVA"],
-["472","HP, IVA soportado"],["473","HP, retenciones y pagos a cuenta"],["4750","HP, acreedora por IVA"],["4751","HP, acreedora por retenciones practicadas"],
+["472","HP, IVA soportado"],["473","HP, retenciones y pagos a cuenta"],["4750","HP, acreedora por IVA"],["4751","HP, acreedora por retenciones practicadas"],["4752","HP, acreedora por impuesto sobre sociedades"],
 ["476","Organismos de la Seguridad Social, acreedores"],["477","HP, IVA repercutido"],["520","Deudas a corto plazo con entidades de crédito"],["550","Titular de la explotación"],
 ["570","Caja, euros"],["600","Compras de mercaderías"],["621","Arrendamientos y cánones"],["622","Reparaciones y conservación"],["623","Servicios de profesionales independientes"],
 ["624","Transportes"],["625","Primas de seguros"],["626","Servicios bancarios"],["627","Publicidad y relaciones públicas"],["628","Suministros"],["629","Otros servicios"],
-["631","Otros tributos"],["640","Sueldos y salarios"],["642","Seguridad Social a cargo de la empresa"],["662","Intereses de deudas"],["681","Amortización del inmovilizado material"],
+["630","Impuesto sobre beneficios"],["631","Otros tributos"],["640","Sueldos y salarios"],["642","Seguridad Social a cargo de la empresa"],["662","Intereses de deudas"],["681","Amortización del inmovilizado material"],
 ["700","Ventas de mercaderías"],["705","Prestaciones de servicios"],["759","Ingresos por servicios diversos"],["769","Otros ingresos financieros"]];
 function blank(year){return{v:1,seq:1,year,sample:false,company:{name:"Mi empresa",nif:"",address:"",type:"autonomo"},
-  accounts:PGC.map(([code,name])=>({code,name})),contacts:[],invoices:[],entries:[],banks:[],assets:[],budgets:{},items:[],moves:[],docs:[],contracts:[],opps:[],projects:[],staff:[]};}
+  accounts:PGC.map(([code,name])=>({code,name})),contacts:[],invoices:[],entries:[],banks:[],assets:[],budgets:{},items:[],moves:[],docs:[],contracts:[],opps:[],projects:[],staff:[],templates:defTemplates()};}
+function defTemplates(){const T=(name,accs)=>({id:"t"+name.length+accs.length+accs[0],name,concept:name,lines:accs.map(a=>({acc:a,d:0,c:0}))});
+  return[T("Nómina del mes (devengo)",["640","642","4751","476","465"]),T("Pago de nóminas",["465","57201"]),T("Pago de seguros sociales",["476","57201"]),T("Pago de la liquidación de IVA",["4750","57201"]),
+    T("Pago de retenciones a Hacienda",["4751","57201"]),T("Cuota de préstamo",["520","662","57201"]),T("Comisión bancaria",["626","57201"]),T("Impuesto sobre Sociedades (devengo)",["630","4752"]),T("Aplicación del resultado",["129","112","113"])];}
 function invTotals(inv){let base=0,vat=0;const byRate={};
   for(const l of inv.lines){const b=r2(l.qty*l.price),v=r2(b*l.vat/100);base+=b;vat+=v;
     const k=byRate[l.vat]||(byRate[l.vat]={base:0,vat:0});k.base=r2(k.base+b);k.vat=r2(k.vat+v);}
@@ -154,30 +157,32 @@ function payInvoice(S,inv,date,bankAcc){const t=invTotals(inv);dropEntries(S,"pa
   else addEntry(S,date,"Pago factura "+inv.number,[{acc:"400",d:t.total,contact:inv.contactId},{acc:bankAcc,c:t.total}],"pay:"+inv.id);
   inv.paid=date;inv.bank=bankAcc;}
 function unpayInvoice(S,inv){dropEntries(S,"pay:"+inv.id);inv.paid=null;inv.bank=null;}
-function balances(S,from,to,skip){const m={};for(const e of S.entries){if((from&&e.date<from)||(to&&e.date>to)||(skip&&e.src.startsWith(skip)))continue;
+function balances(S,from,to,skip){const m={};for(const e of S.entries){if((from&&e.date<from)||(to&&e.date>to)||(skip&&[].concat(skip).some(p=>e.src.startsWith(p))))continue;
   for(const l of e.lines){const b=m[l.acc]||(m[l.acc]={d:0,c:0});b.d=r2(b.d+l.d);b.c=r2(b.c+l.c);}}return m;}
 function pnl(S,from,to){const m=balances(S,from,to,"reg:");const inc=[],exp=[];let ti=0,te=0;
   for(const code of Object.keys(m).sort()){const b=m[code];
     if(code[0]==="7"){const v=r2(b.c-b.d);inc.push({code,v});ti=r2(ti+v);}
     if(code[0]==="6"){const v=r2(b.d-b.c);exp.push({code,v});te=r2(te+v);}}
   return{inc,exp,ti,te,result:r2(ti-te)};}
-function classify(code){const g=code[0],p2=code.slice(0,2),p3=code.slice(0,3);
-  if(g==="6"||g==="7")return"R";
-  if(g==="2")return"ANC";if(g==="3")return"EX";
-  if(p2==="43"||p2==="44"||p3==="470"||p3==="471"||p3==="472"||p3==="473")return"DEU";
-  if(p2==="57")return"EF";
-  if(g==="1")return(p2<="13")?"PN":"PNC";
-  if(p2==="55")return"PN";
-  return"PC";}
-function balanceSheet(S,to){const m=balances(S,null,to);
-  const g={ANC:[],EX:[],DEU:[],EF:[],PN:[],PNC:[],PC:[]};let res=0;
-  for(const code of Object.keys(m).sort()){const b=m[code],k=classify(code);
-    if(k==="R"){res=r2(res+b.c-b.d);continue;}
-    const asset=["ANC","EX","DEU","EF"].includes(k);const v=asset?r2(b.d-b.c):r2(b.c-b.d);if(v)g[k].push({code,v});}
-  if(res)g.PN.push({code:"129",v:res,label:"Resultado pendiente de cierre"});
-  const sum=k=>r2(g[k].reduce((a,x)=>a+x.v,0));
-  const activo=r2(sum("ANC")+sum("EX")+sum("DEU")+sum("EF")),pasivo=r2(sum("PN")+sum("PNC")+sum("PC"));
-  return{g,sum,activo,pasivo};}
+const BSD=[["A","A) ACTIVO NO CORRIENTE",[["I. Inmovilizado intangible",["20","280","290"]],["II. Inmovilizado material",["21","23","281","291","2"]],["III. Inversiones inmobiliarias",["22","282","292"]],["V. Inversiones financieras a largo plazo",["24","25","26"]],["VI. Activos por impuesto diferido",["474"]]]],
+ ["A","B) ACTIVO CORRIENTE",[["I. Existencias",["3"]],["II. Deudores comerciales y otras cuentas a cobrar",["43","44","460","470","471","472","473"]],["IV. Inversiones financieras a corto plazo",["53","54"]],["V. Periodificaciones a corto plazo",["480","567"]],["VI. Efectivo y otros activos líquidos equivalentes",["57"]]]],
+ ["P","A) PATRIMONIO NETO",[["I. Capital",["10"]],["III. Reservas",["11"]],["V. Resultados de ejercicios anteriores",["12"]],["VI. Otras aportaciones y cuenta del titular",["118","55"]],["VII. Resultado del ejercicio",["129","6","7"]],["Subvenciones y ajustes",["13","8","9"]]]],
+ ["P","B) PASIVO NO CORRIENTE",[["I. Provisiones a largo plazo",["14"]],["II. Deudas a largo plazo",["1"]],["IV. Pasivos por impuesto diferido",["479"]]]],
+ ["P","C) PASIVO CORRIENTE",[["II. Deudas a corto plazo",["5"]],["IV. Acreedores comerciales y otras cuentas a pagar",["4"]],["V. Periodificaciones a corto plazo",["485","568"]]]]];
+function bsAt(code){let best=null,bl=-1;BSD.forEach((sec,si)=>sec[2].forEach((ln,li)=>{for(const p of ln[1])if(code.startsWith(p)&&p.length>bl){bl=p.length;best=[si,li];}}));return best;}
+function balanceSheet(S,to){const m=balances(S,null,to,"cie:"+to.slice(0,4));
+  const secs=BSD.map(x=>({side:x[0],title:x[1],total:0,lines:x[2].map(l=>({label:l[0],v:0,accs:[]}))}));
+  for(const code of Object.keys(m).sort()){const at=bsAt(code);if(!at)continue;const sec=secs[at[0]],ln=sec.lines[at[1]],v=sec.side==="A"?r2(m[code].d-m[code].c):r2(m[code].c-m[code].d);if(!v)continue;
+    ln.v=r2(ln.v+v);sec.total=r2(sec.total+v);const pend=code[0]==="6"||code[0]==="7",key=pend?"—":code;let a=ln.accs.find(x=>x.code===key);
+    if(!a){a={code:key,v:0,label:pend?"Ingresos menos gastos pendientes de regularizar":null};ln.accs.push(a);}a.v=r2(a.v+v);}
+  const sum=k=>r2(secs.filter(x=>x.side===k).reduce((a,x)=>a+x.total,0));return{secs,activo:sum("A"),pasivo:sum("P")};}
+const PLD=[["1. Importe neto de la cifra de negocios",["70"]],["2. Variación de existencias de productos terminados y en curso",["71"]],["3. Trabajos realizados por la empresa para su activo",["73"]],["4. Aprovisionamientos",["60","61"]],["5. Otros ingresos de explotación",["74","75"]],["6. Gastos de personal",["64"]],["7. Otros gastos de explotación",["62","63","65","6","7"]],["8. Amortización del inmovilizado",["68"]],["11. Deterioro y resultado por enajenaciones del inmovilizado",["67","69","77","79"]],
+ "A) RESULTADO DE EXPLOTACIÓN",["12. Ingresos financieros",["76"]],["13. Gastos financieros",["66"]],"B) RESULTADO FINANCIERO","C) RESULTADO ANTES DE IMPUESTOS",["17. Impuesto sobre beneficios",["630","633","638"]],"D) RESULTADO DEL EJERCICIO"];
+function pnlOfficial(S,y){const m=balances(S,y+"-01-01",y+"-12-31","reg:"),rows=PLD.map(l=>typeof l==="string"?{title:l,v:0}:{label:l[0],v:0,accs:[]});
+  for(const code of Object.keys(m).sort()){if(code[0]!=="6"&&code[0]!=="7")continue;let bi=-1,bl=-1;PLD.forEach((l,i)=>{if(typeof l!=="string")for(const p of l[1])if(code.startsWith(p)&&p.length>bl){bl=p.length;bi=i;}});
+    const v=r2(m[code].c-m[code].d);if(!v)continue;rows[bi].v=r2(rows[bi].v+v);rows[bi].accs.push({code,v});}
+  let ex=0,fin=0,tax=0;rows.forEach((r,i)=>{if(r.title)return;if(i<9)ex=r2(ex+r.v);else if(i<12)fin=r2(fin+r.v);else tax=r2(tax+r.v);});
+  rows[9].v=ex;rows[12].v=fin;rows[13].v=r2(ex+fin);rows[15].v=r2(ex+fin+tax);return rows;}
 function qRange(y,q){const m0=(q-1)*3+1,m1=m0+2,last=new Date(y,m1,0).getDate();return[y+"-"+pad(m0,2)+"-01",y+"-"+pad(m1,2)+"-"+pad(last,2)];}
 function invIn(S,kind,from,to){return S.invoices.filter(i=>i.kind===kind&&i.date>=from&&i.date<=to);}
 function tax303(S,y,q){const[f,t]=qRange(y,q);const acc=list=>{const r={};let b=0,v=0;
@@ -190,18 +195,27 @@ function tax130(S,y,q){const[,t]=qRange(y,q),f=y+"-01-01";let ing=0,gas=0,ret=0;
   const rend=r2(ing-gas),cuota=r2(Math.max(0,rend)*0.2);let prev=0;
   for(let k=1;k<q;k++)prev=r2(prev+Math.max(0,tax130(S,y,k).result));
   return{ing,gas,rend,cuota,ret,prev,result:r2(cuota-ret-prev)};}
-function tax111(S,y,q){const[f,t]=qRange(y,q);let base=0,ret=0,n=0;
-  for(const i of invIn(S,"recibida",f,t)){const x=invTotals(i);if(x.irpf){base=r2(base+x.base);ret=r2(ret+x.irpf);n++;}}return{base,ret,n};}
-function tax347(S,y){const m={};for(const i of S.invoices){if(i.date.slice(0,4)!==String(y))continue;const x=invTotals(i);
-  const k=i.contactId+"|"+i.kind;m[k]=r2((m[k]||0)+x.base+x.vat);}
-  return Object.entries(m).filter(([,v])=>Math.abs(v)>3005.06).map(([k,v])=>{const[id,kind]=k.split("|");return{contactId:+id,kind,total:v};}).sort((a,b)=>b.total-a.total);}
-function settleVat(S,y,q){const src="iva:"+y+":"+q;dropEntries(S,src);const[,t]=qRange(y,q),m=balances(S,null,t);
+function tax111(S,y,q){const[f,t]=qRange(y,q);let base=0,ret=0,n=0,wb=0,wr=0;
+  for(const i of invIn(S,"recibida",f,t)){if(i.account==="621")continue;const x=invTotals(i);if(x.irpf){base=r2(base+x.base);ret=r2(ret+x.irpf);n++;}}
+  for(const e of S.entries)if(e.src.startsWith("nom:")&&e.date>=f&&e.date<=t)for(const l of e.lines){if(l.acc==="640")wb=r2(wb+l.d);if(l.acc==="4751")wr=r2(wr+l.c);}
+  return{base,ret,n,wb,wr,total:r2(ret+wr)};}
+function tax115(S,y,q){const[f,t]=qRange(y,q);let base=0,ret=0,n=0;for(const i of invIn(S,"recibida",f,t)){if(i.account!=="621")continue;const x=invTotals(i);if(x.irpf){base=r2(base+x.base);ret=r2(ret+x.irpf);n++;}}return{base,ret,n};}
+function tax390(S,y){const qs=[1,2,3,4].map(k=>tax303(S,y,k)),agg=key=>{const r={};let b=0,v=0;for(const x of qs){for(const k in x[key].rates){const o=r[k]||(r[k]={base:0,vat:0});o.base=r2(o.base+x[key].rates[k].base);o.vat=r2(o.vat+x[key].rates[k].vat);}b=r2(b+x[key].base);v=r2(v+x[key].vat);}return{rates:r,base:b,vat:v};};
+  let ib=0,iv=0;for(const i of invIn(S,"recibida",y+"-01-01",y+"-12-31"))if(i.account[0]==="2"){const x=invTotals(i);ib=r2(ib+x.base);iv=r2(iv+x.vat);}
+  const dev=agg("dev"),sop=agg("sop");return{dev,sop,inv:{base:ib,vat:iv},q:qs.map(x=>x.result),result:r2(dev.vat-sop.vat)};}
+function tax190(S,y){const prof={},rent={};for(const i of invIn(S,"recibida",y+"-01-01",y+"-12-31")){const x=invTotals(i);if(!x.irpf)continue;const g=i.account==="621"?rent:prof,o=g[i.contactId]||(g[i.contactId]={contactId:i.contactId,base:0,ret:0});o.base=r2(o.base+x.base);o.ret=r2(o.ret+x.irpf);}
+  let months=0;for(const e of S.entries)if(e.src.startsWith("nom:"+y+":"))months++;
+  return{prof:Object.values(prof),rent:Object.values(rent),months,staff:months?S.staff.map(e=>({name:e.name,nif:e.nif,base:r2(e.gross*months),ret:r2(r2(e.gross*e.irpf/100)*months)})):[]};}
+function tax347(S,y){const m={};for(const i of S.invoices){if(i.date.slice(0,4)!==String(y)||i.irpf>0)continue;const x=invTotals(i),k=i.contactId+"|"+i.kind,o=m[k]||(m[k]={contactId:i.contactId,kind:i.kind,total:0,q:[0,0,0,0]}),v=r2(x.base+x.vat),qi=Math.floor((+i.date.slice(5,7)-1)/3);o.total=r2(o.total+v);o.q[qi]=r2(o.q[qi]+v);}
+  return Object.values(m).filter(o=>Math.abs(o.total)>3005.06).sort((a,b)=>b.total-a.total);}
+function settleVat(S,y,q){const src="iva:"+y+":"+q;dropEntries(S,src);const[,t]=qRange(y,q),m=balances(S,null,t,"cie:"+y);
   const a=m["477"]||{d:0,c:0},b=m["472"]||{d:0,c:0},rp=r2(a.c-a.d),sp=r2(b.d-b.c),df=r2(rp-sp);if(!rp&&!sp)return null;
   return addEntry(S,t,"Liquidación de IVA "+q+"T "+y,[rp>=0?{acc:"477",d:rp}:{acc:"477",c:-rp},sp>=0?{acc:"472",c:sp}:{acc:"472",d:-sp},df>=0?{acc:"4750",c:df}:{acc:"4700",d:-df}],src);}
-function closeYear(S,y){const src="reg:"+y;dropEntries(S,src);const m=balances(S,y+"-01-01",y+"-12-31"),ls=[];let tot=0;
+function closeYear(S,y){for(const p of["reg:","cie:","ape:"])dropEntries(S,p+y);const f=y+"-01-01",t=y+"-12-31",m=balances(S,f,t),ls=[];let tot=0;
   for(const k of Object.keys(m).sort()){if(k[0]!=="6"&&k[0]!=="7")continue;const v=r2(m[k].d-m[k].c);if(!v)continue;tot=r2(tot+v);ls.push(v>0?{acc:k,c:v}:{acc:k,d:-v});}
-  if(!ls.length)return null;if(tot)ls.push(tot>0?{acc:"129",d:tot}:{acc:"129",c:-tot});
-  return addEntry(S,y+"-12-31","Regularización y cierre "+y,ls,src);}
+  if(ls.length){if(tot)ls.push(tot>0?{acc:"129",d:tot}:{acc:"129",c:-tot});addEntry(S,t,"Regularización de ingresos y gastos "+y,ls,"reg:"+y);}
+  const b=balances(S,null,t),c1=[],c2=[];for(const k of Object.keys(b).sort()){const v=r2(b[k].d-b[k].c);if(!v)continue;c1.push(v>0?{acc:k,c:v}:{acc:k,d:-v});c2.push(v>0?{acc:k,d:v}:{acc:k,c:-v});}
+  if(!c1.length)return null;addEntry(S,t,"Asiento de cierre "+y,c1,"cie:"+y);addEntry(S,(y+1)+"-01-01","Asiento de apertura "+(y+1),c2,"ape:"+y);return true;}
 function assetCum(a,y){const y0=+a.date.slice(0,4);if(y<y0)return 0;const st=new Date(a.date+"T12:00:00"),en=new Date(y0,11,31,12);
   const frac=Math.min(1,(Math.round((en-st)/864e5)+1)/365);return r2(Math.min(a.cost,a.cost/a.years*(frac+(y-y0))));}
 function assetDep(a,y){return r2(assetCum(a,y)-assetCum(a,y-1));}
@@ -309,7 +323,7 @@ async function init(){let d=null;try{d=await dbGet();}catch(e){}
   DB=d;DB.created=DB.created||Date.now();if(!DB.companies[DB.current])DB.current=Object.keys(DB.companies)[0];S=DB.companies[DB.current];ensure();render();}
 function useCompany(id){DB.current=id;S=DB.companies[id];ensure();ui.bank=null;save();closeModal();render();}
 function newCompany(data){let n=1;while(DB.companies["c"+n])n++;DB.companies["c"+n]=data;useCompany("c"+n);}
-function ensure(){for(const k of["assets","items","moves","docs","contracts","opps","projects","staff"])S[k]=S[k]||[];S.budgets=S.budgets||{};
+function ensure(){for(const k of["assets","items","moves","docs","contracts","opps","projects","staff"])S[k]=S[k]||[];S.budgets=S.budgets||{};if(!S.templates)S.templates=defTemplates();let add=false;for(const[c,n]of PGC)if(!S.accounts.some(a=>a.code===c)){S.accounts.push({code:c,name:n});add=true;}if(add)S.accounts.sort((a,b)=>a.code<b.code?-1:1);
   if(!S.accounts.some(a=>a.code==="4700")){S.accounts.push({code:"4700",name:"HP, deudora por IVA"});S.accounts.sort((a,b)=>a.code<b.code?-1:1);}}
 function save(){if(!DB)return;DB.companies[DB.current]=S;dbPut(DB).then(()=>{saveErr=false;},()=>{try{localStorage.setItem(KEY2,JSON.stringify(DB));saveErr=false;}catch(e){if(!saveErr){saveErr=true;render();}}});}
 const accName=c=>{const a=S.accounts.find(x=>x.code===c);return a?a.name:"";};
@@ -336,7 +350,7 @@ function status(i){if(i.paid)return`<span class="pill good">${i.kind==="emitida"
   if(i.due&&i.due<TODAY)return`<span class="pill bad">Vencida</span>`;return`<span class="pill warn">Pendiente</span>`;}
 
 /* Panel */
-function vPanel(){const[f,t]=yr();const p=pnl(S,f,t),m=balances(S,null,t);
+function vPanel(){const[f,t]=yr();const p=pnl(S,f,t),m=balances(S,null,t,"cie:"+S.year);
   let cash=0;for(const k in m)if(k.slice(0,2)==="57")cash=r2(cash+m[k].d-m[k].c);
   const open=k=>S.invoices.filter(i=>i.kind===k&&!i.paid).reduce((a,i)=>r2(a+invTotals(i).total),0);
   const q=S.year===now.getFullYear()?Math.floor(now.getMonth()/3)+1:4,iva=tax303(S,S.year,q);
@@ -519,17 +533,21 @@ function conForm(id){const c=S.contacts.find(x=>x.id===id)||{id:0,type:"cliente"
 
 /* Diario */
 function vDiario(){const es=S.entries.filter(inYear).sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:a.id-b.id);let td=0,tc=0;
-  const rows=es.map((e,k)=>{const tag=e.src.startsWith("inv:")?`<span class="pill neu">Factura</span>`:e.src.startsWith("pay:")?`<span class="pill good">Cobro/pago</span>`:(e.src?`<span class="pill warn">${e.src.startsWith("iva:")?"Liquidación IVA":e.src.startsWith("reg:")?"Cierre":e.src.startsWith("nom:")?"Nómina":"Amortización"}</span> `:"")+`<button class="link" data-act="ent-del" data-id="${e.id}">Borrar</button>`;
+  const rows=es.map((e,k)=>{const TAG={inv:["neu","Factura"],pay:["good","Cobro/pago"],iva:["warn","Liquidación IVA"],reg:["warn","Regularización"],cie:["warn","Cierre"],ape:["warn","Apertura"],nom:["warn","Nómina"],amo:["warn","Amortización"]}[e.src.slice(0,3)];
+    const tag=(TAG?`<span class="pill ${TAG[0]}">${TAG[1]}</span> `:"")+(!e.src?`<button class="link" data-act="ent-dup" data-id="${e.id}">Duplicar</button>`:"")+(/^(inv|pay|reg|cie|ape)/.test(e.src)?"":`<button class="link" data-act="ent-del" data-id="${e.id}">Borrar</button>`);
     return`<tr class="eh"><td>${k+1}</td><td>${fd(e.date)}</td><td colspan="2">${esc(e.concept)}</td><td class="n" colspan="2">${tag}</td></tr>`+e.lines.map(l=>{td=r2(td+l.d);tc=r2(tc+l.c);
       return`<tr><td></td><td></td><td>${l.acc}</td><td>${esc(accName(l.acc))}${l.contact?` <span class="muted">· ${esc(contact(l.contact).name)}</span>`:""}</td><td class="n">${l.d?eur(l.d):""}</td><td class="n">${l.c?eur(l.c):""}</td></tr>`;}).join("");}).join("");
-  return`<div class="head"><h1>Libro diario ${S.year}</h1><div class="row"><button data-act="tbl-csv">Exportar a Excel (.csv)</button>${S.entries.some(e=>e.src==="reg:"+S.year)?`<span class="pill good">Ejercicio regularizado</span><button data-act="year-open">Deshacer cierre</button>`:`<button data-act="year-close">Regularizar y cerrar ${S.year}</button>`}<button class="pri" data-act="ent-new">Nuevo asiento manual</button></div></div>
+  return`<div class="head"><h1>Libro diario ${S.year}</h1><div class="row"><button data-act="tbl-csv">Exportar a Excel (.csv)</button>${S.entries.some(e=>e.src==="reg:"+S.year||e.src==="cie:"+S.year)?`<span class="pill good">Ejercicio cerrado</span><button data-act="year-open">Deshacer cierre</button>`:`<button data-act="year-close">Cerrar ejercicio ${S.year}</button>`}<button class="pri" data-act="ent-new">Nuevo asiento manual</button></div></div>
   <div class="card"><div class="tw"><table><tr><th>Nº</th><th>Fecha</th><th>Cuenta</th><th>Concepto</th><th class="n">Debe</th><th class="n">Haber</th></tr>${rows||`<tr><td colspan="6" class="muted">Sin asientos.</td></tr>`}
   <tr class="tot"><td colspan="4">Totales</td><td class="n">${eur(td)}</td><td class="n">${eur(tc)}</td></tr></table></div></div>`;}
-function entRow(){return`<tr><td><select class="e-acc" aria-label="Cuenta">${accOpts(()=>true)}</select></td><td style="width:130px"><input class="e-d" type="number" step="any" min="0" aria-label="Debe"></td><td style="width:130px"><input class="e-c" type="number" step="any" min="0" aria-label="Haber"></td></tr>`;}
-function entForm(){modal(`<form class="dlg" data-form="entry"><h2>Nuevo asiento manual</h2><div class="form"><label>Fecha<input id="e-date" type="date" required value="${TODAY}"></label><label>Concepto<input id="e-concept" required></label></div>
-  <div class="tw"><table><thead><tr><th>Cuenta</th><th>Debe</th><th>Haber</th></tr></thead><tbody id="e-lines">${entRow()+entRow()}</tbody></table></div>
-  <div class="row" style="justify-content:space-between"><button type="button" data-act="ent-line">Añadir línea</button><div id="e-tot" class="small"></div></div><div class="err" id="f-err"></div>
-  <div class="row" style="justify-content:flex-end"><button type="button" data-act="close">Cancelar</button><button class="pri">Guardar asiento</button></div></form>`);}
+function entRow(l){l=l||{};return`<tr><td><select class="e-acc" aria-label="Cuenta">${accOpts(()=>true,l.acc)}</select></td><td style="width:130px"><input class="e-d" type="number" step="any" min="0" value="${l.d||""}" aria-label="Debe"></td><td style="width:130px"><input class="e-c" type="number" step="any" min="0" value="${l.c||""}" aria-label="Haber"></td><td style="width:40px"><button type="button" class="link" data-act="eline-del" aria-label="Quitar línea">✕</button></td></tr>`;}
+function entForm(pre){pre=pre||{concept:"",lines:[{},{}]};modal(`<form class="dlg" data-form="entry"><h2>Nuevo asiento manual</h2>
+  <div class="form"><label>Plantilla<select id="e-tpl"><option value="">Usar plantilla…</option>${S.templates.map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join("")}</select></label><label>Fecha<input id="e-date" type="date" required value="${TODAY}"></label><label>Concepto<input id="e-concept" required value="${esc(pre.concept)}"></label></div>
+  <div class="tw"><table><thead><tr><th>Cuenta</th><th>Debe</th><th>Haber</th><th></th></tr></thead><tbody id="e-lines">${pre.lines.map(entRow).join("")}</tbody></table></div>
+  <div class="row" style="justify-content:space-between"><button type="button" data-act="ent-line">Añadir línea</button><div id="e-tot" class="small"></div></div>
+  <details><summary class="small muted">Crear una cuenta nueva sin salir del asiento</summary><div class="row" style="margin-top:8px"><input id="e-ncode" placeholder="Código" style="width:120px" aria-label="Código de la cuenta nueva"><input id="e-nname" placeholder="Nombre de la cuenta" style="flex:1;min-width:180px;width:auto" aria-label="Nombre de la cuenta nueva"><button type="button" data-act="acc-quick">Crear cuenta</button></div></details>
+  <label style="flex-direction:row;align-items:center;gap:8px;font-weight:500;color:var(--ink)"><input id="e-save" type="checkbox" style="width:auto">Guardar también como plantilla, con el concepto como nombre</label>
+  <div class="err" id="f-err"></div><div class="row" style="justify-content:flex-end"><button type="button" data-act="tpl-del">Borrar la plantilla elegida</button><button type="button" data-act="close">Cancelar</button><button class="pri">Guardar asiento</button></div></form>`);updEnt();}
 function readEnt(){return $$("#e-lines tr").map(tr=>({acc:$(".e-acc",tr).value,d:+$(".e-d",tr).value||0,c:+$(".e-c",tr).value||0})).filter(l=>l.d||l.c);}
 function updEnt(){if(!$("#e-tot"))return;const ls=readEnt(),d=r2(ls.reduce((a,l)=>a+l.d,0)),c=r2(ls.reduce((a,l)=>a+l.c,0));
   $("#e-tot").innerHTML=`Debe <b>${eur(d)}</b> · Haber <b>${eur(c)}</b> · ${d===c?`<span class="pill good">Cuadrado</span>`:`<span class="pill bad">Descuadre ${eur(r2(d-c))}</span>`}`;}
@@ -537,18 +555,25 @@ function updEnt(){if(!$("#e-tot"))return;const ls=readEnt(),d=r2(ls.reduce((a,l)
 /* Informes */
 function vInformes(){const[f,t]=yr();const tabs=[["sumas","Sumas y saldos"],["mayor","Libro mayor"],["situacion","Balance de situación"],["pyg","Pérdidas y ganancias"],["iva","Libros de IVA"],["analitica","Analítica"],["plan","Plan de cuentas"]];
   let body="";
-  if(ui.rep==="sumas"){const m=balances(S,f,t);let a=0,b=0,c=0,d=0;
+  if(ui.rep==="sumas"){const m=balances(S,f,t,["reg:","cie:"]);let a=0,b=0,c=0,d=0;
     body=`<table><tr><th>Cuenta</th><th>Nombre</th><th class="n">Debe</th><th class="n">Haber</th><th class="n">Saldo deudor</th><th class="n">Saldo acreedor</th></tr>${Object.keys(m).sort().map(k=>{const x=m[k],s=r2(x.d-x.c);a=r2(a+x.d);b=r2(b+x.c);if(s>0)c=r2(c+s);else d=r2(d-s);
       return`<tr><td><button class="link" data-act="mayor" data-acc="${k}">${k}</button></td><td>${esc(accName(k))}</td><td class="n">${eur(x.d)}</td><td class="n">${eur(x.c)}</td><td class="n">${s>0?eur(s):""}</td><td class="n">${s<0?eur(-s):""}</td></tr>`;}).join("")}
       <tr class="tot"><td colspan="2">Totales</td><td class="n">${eur(a)}</td><td class="n">${eur(b)}</td><td class="n">${eur(c)}</td><td class="n">${eur(d)}</td></tr></table>`;}
   if(ui.rep==="mayor"){let s=0;const rows=[];for(const e of S.entries.filter(inYear).sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:a.id-b.id))for(const l of e.lines)if(l.acc===ui.mayor){s=r2(s+l.d-l.c);rows.push(`<tr><td>${fd(e.date)}</td><td>${esc(e.concept)}</td><td class="n">${l.d?eur(l.d):""}</td><td class="n">${l.c?eur(l.c):""}</td><td class="n">${eur(s)}</td></tr>`);}
     body=`<div class="row" style="margin-bottom:10px"><label style="min-width:280px">Cuenta<select id="mayor-acc">${accOpts(()=>true,ui.mayor)}</select></label></div><table><tr><th>Fecha</th><th>Concepto</th><th class="n">Debe</th><th class="n">Haber</th><th class="n">Saldo</th></tr>${rows.join("")||`<tr><td colspan="5" class="muted">Sin movimientos en ${S.year}.</td></tr>`}</table>`;}
-  if(ui.rep==="situacion"){const B=balanceSheet(S,t);const sec=(title,k)=>B.g[k].length?`<tr class="sub"><td colspan="2">${title}</td><td class="n">${eur(B.sum(k))}</td></tr>`+B.g[k].map(x=>`<tr><td>${x.code}</td><td>${esc(x.label||accName(x.code))}</td><td class="n">${eur(x.v)}</td></tr>`).join(""):"";
-    body=`<div class="grid2"><div><table><tr><th colspan="2">Activo</th><th class="n">${fd(t)}</th></tr>${sec("Activo no corriente","ANC")+sec("Existencias","EX")+sec("Deudores y Hacienda deudora","DEU")+sec("Efectivo","EF")}<tr class="tot"><td colspan="2">Total activo</td><td class="n">${eur(B.activo)}</td></tr></table></div>
-    <div><table><tr><th colspan="2">Patrimonio neto y pasivo</th><th class="n">${fd(t)}</th></tr>${sec("Patrimonio neto","PN")+sec("Pasivo no corriente","PNC")+sec("Pasivo corriente","PC")}<tr class="tot"><td colspan="2">Total patrimonio neto y pasivo</td><td class="n">${eur(B.pasivo)}</td></tr></table></div></div>
+  if(ui.rep==="situacion"){const B=balanceSheet(S,t),P=balanceSheet(S,(S.year-1)+"-12-31");
+    const side=k=>B.secs.map((x,i)=>{const p=P.secs[i];if(x.side!==k||(!x.total&&!p.total&&!x.lines.some(l=>l.v)))return"";
+      return`<tr class="sub"><td colspan="2">${x.title}</td><td class="n">${eur(x.total)}</td><td class="n">${eur(p.total)}</td></tr>`+x.lines.map((l,j)=>{const q=p.lines[j];if(!l.v&&!q.v&&!l.accs.length)return"";
+        return`<tr class="eh"><td colspan="2">${l.label}</td><td class="n">${eur(l.v)}</td><td class="n">${eur(q.v)}</td></tr>`+l.accs.map(a=>{const pa=q.accs.find(z=>z.code===a.code);return`<tr><td>${a.code}</td><td>${esc(a.label||accName(a.code))}</td><td class="n">${eur(a.v)}</td><td class="n muted">${pa?eur(pa.v):""}</td></tr>`;}).join("");}).join("");}).join("");
+    body=`<table><tr><th colspan="2">Balance de situación (modelo de pymes)</th><th class="n">${fd(t)}</th><th class="n">${fd((S.year-1)+"-12-31")}</th></tr>
+    <tr class="sub"><td colspan="4">ACTIVO</td></tr>${side("A")}<tr class="tot"><td colspan="2">TOTAL ACTIVO</td><td class="n">${eur(B.activo)}</td><td class="n">${eur(P.activo)}</td></tr>
+    <tr class="sub"><td colspan="4">PATRIMONIO NETO Y PASIVO</td></tr>${side("P")}<tr class="tot"><td colspan="2">TOTAL PATRIMONIO NETO Y PASIVO</td><td class="n">${eur(B.pasivo)}</td><td class="n">${eur(P.pasivo)}</td></tr></table>
     <p class="small">${B.activo===B.pasivo?`<span class="pill good">Balance cuadrado</span>`:`<span class="pill bad">Descuadre ${eur(r2(B.activo-B.pasivo))}</span>`}</p>`;}
-  if(ui.rep==="pyg"){const p=pnl(S,f,t);const li=x=>`<tr><td>${x.code}</td><td>${esc(accName(x.code))}</td><td class="n">${eur(x.v)}</td></tr>`;
-    body=`<table><tr><th colspan="2">Cuenta</th><th class="n">${S.year}</th></tr><tr class="sub"><td colspan="2">Ingresos</td><td class="n">${eur(p.ti)}</td></tr>${p.inc.map(li).join("")}<tr class="sub"><td colspan="2">Gastos</td><td class="n">${eur(p.te)}</td></tr>${p.exp.map(li).join("")}<tr class="tot"><td colspan="2">Resultado antes de impuestos</td><td class="n">${eur(p.result)}</td></tr></table>`;}
+  if(ui.rep==="pyg"){const R=pnlOfficial(S,S.year),Q=pnlOfficial(S,S.year-1);
+    body=`<table><tr><th colspan="2">Cuenta de pérdidas y ganancias (modelo de pymes)</th><th class="n">${S.year}</th><th class="n">${S.year-1}</th></tr>${R.map((r,i)=>{const q=Q[i];
+      if(r.title)return`<tr class="${i===R.length-1?"tot":"sub"}"><td colspan="2">${r.title}</td><td class="n">${eur(r.v)}</td><td class="n">${eur(q.v)}</td></tr>`;if(!r.v&&!q.v)return"";
+      return`<tr class="eh"><td colspan="2">${r.label}</td><td class="n">${eur(r.v)}</td><td class="n">${eur(q.v)}</td></tr>`+r.accs.map(a=>{const pa=q.accs.find(z=>z.code===a.code);return`<tr><td>${a.code}</td><td>${esc(accName(a.code))}</td><td class="n">${eur(a.v)}</td><td class="n muted">${pa?eur(pa.v):""}</td></tr>`;}).join("");}).join("")}</table>
+    <p class="small muted">Los ingresos figuran en positivo y los gastos en negativo.</p>`;}
   if(ui.rep==="iva"){const sec=(kind,title)=>{let b=0,c=0;const rows=[];
       for(const i of S.invoices.filter(i=>i.kind===kind&&inYear(i)&&(!ui.lq||Math.floor((+i.date.slice(5,7)-1)/3)+1===ui.lq)).sort((x,y)=>x.date<y.date?-1:x.date>y.date?1:x.id-y.id)){const t=invTotals(i),co=contact(i.contactId);
         for(const k of Object.keys(t.byRate)){const o=t.byRate[k];b=r2(b+o.base);c=r2(c+o.vat);rows.push(`<tr><td>${fd(i.date)}</td><td>${esc(i.number)}</td><td>${esc(co.nif)}</td><td>${esc(co.name)}</td><td class="n">${eur(o.base)}</td><td class="n">${k} %</td><td class="n">${eur(o.vat)}</td><td class="n">${eur(r2(o.base+o.vat))}</td></tr>`);}}
@@ -562,7 +587,7 @@ function vInformes(){const[f,t]=yr();const tabs=[["sumas","Sumas y saldos"],["ma
   return`<div class="head"><h1>Mayor y balances ${S.year}</h1><button data-act="tbl-csv">Exportar a Excel (.csv)</button></div><div class="tabs">${tabs.map(([k,n])=>`<button data-act="rep" data-rep="${k}" class="${ui.rep===k?"on":""}">${n}</button>`).join("")}</div><div class="card"><div class="tw">${body}</div></div>`;}
 
 /* Bancos */
-function vBancos(){const[,t]=yr();const m=balances(S,null,t),accs=S.accounts.filter(a=>a.code.slice(0,2)==="57");
+function vBancos(){const[,t]=yr();const m=balances(S,null,t,"cie:"+S.year),accs=S.accounts.filter(a=>a.code.slice(0,2)==="57");
   if(!ui.bank||!accs.some(a=>a.code===ui.bank))ui.bank=(accs.find(a=>a.code!=="570")||accs[0]).code;
   let s=0;const prev=balances(S,null,(S.year-1)+"-12-31")[ui.bank];if(prev)s=r2(prev.d-prev.c);const rows=[`<tr><td></td><td class="muted">Saldo inicial</td><td></td><td></td><td class="n">${eur(s)}</td><td></td></tr>`];let okS=s,pend=0;
   for(const e of S.entries.filter(inYear).sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:a.id-b.id))e.lines.forEach((l,k)=>{if(l.acc!==ui.bank)return;s=r2(s+l.d-l.c);if(l.ok)okS=r2(okS+l.d-l.c);else pend++;rows.push(`<tr><td>${fd(e.date)}</td><td>${esc(e.concept)}</td><td class="n">${l.d?eur(l.d):""}</td><td class="n">${l.c?eur(l.c):""}</td><td class="n">${eur(s)}</td><td class="n"><input type="checkbox" class="chk" style="width:auto" data-e="${e.id}" data-k="${k}" ${l.ok?"checked":""} aria-label="Punteado"></td></tr>`);});
@@ -577,17 +602,28 @@ function movForm(){modal(`<form class="dlg sm" data-form="mov"><h2>Nuevo movimie
 
 /* Impuestos */
 function vImpuestos(){const y=S.year,q=ui.q,soc=S.company.type==="sociedad";let body;
-  if(q===5){const r=tax347(S,y);body=`<div class="card"><h2>Modelo 347 · operaciones con terceros superiores a 3.005,06 €</h2><div class="tw"><table><tr><th>Tercero</th><th>NIF</th><th>Clave</th><th class="n">Importe anual (IVA incluido)</th></tr>${r.map(x=>`<tr><td>${esc(contact(x.contactId).name)}</td><td>${esc(contact(x.contactId).nif)}</td><td>${x.kind==="emitida"?"B · Ventas":"A · Compras"}</td><td class="n">${eur(x.total)}</td></tr>`).join("")||`<tr><td colspan="4" class="muted">Ningún tercero supera el umbral en ${y}.</td></tr>`}</table></div><p class="small muted">Las operaciones con retención que ya se declaran en otros modelos (por ejemplo alquileres con retención, modelo 180) quedan fuera del 347; revísalas antes de presentar.</p></div>`;}
-  else{const v=tax303(S,y,q),i=tax130(S,y,q),r=tax111(S,y,q),[f,t]=qRange(y,q);
+  if(q===5){const r=tax347(S,y);body=`<div class="card"><h2>Modelo 347 · operaciones con terceros superiores a 3.005,06 €</h2><div class="tw"><table><tr><th>Tercero</th><th>NIF</th><th>Clave</th><th class="n">1T</th><th class="n">2T</th><th class="n">3T</th><th class="n">4T</th><th class="n">Importe anual</th></tr>${r.map(x=>`<tr><td>${esc(contact(x.contactId).name)}</td><td>${esc(contact(x.contactId).nif)}</td><td>${x.kind==="emitida"?"B · Ventas":"A · Compras"}</td>${x.q.map(v=>`<td class="n">${eur(v)}</td>`).join("")}<td class="n"><b>${eur(x.total)}</b></td></tr>`).join("")||`<tr><td colspan="8" class="muted">Ningún tercero supera el umbral en ${y}.</td></tr>`}</table></div><p class="small muted">Importes con IVA incluido. Quedan fuera las facturas con retención, porque esas operaciones se declaran en los modelos 190 o 180. Se presenta en febrero del año siguiente.</p></div>`;}
+  else if(q===6){const r=tax390(S,y),rs=o=>Object.keys(o.rates).sort((a,b)=>b-a).map(k=>`<tr><td>${k} %</td><td class="n">${eur(o.rates[k].base)}</td><td class="n">${eur(o.rates[k].vat)}</td></tr>`).join("");
+    body=`<div class="grid2"><div class="card"><div class="head"><h2>Modelo 390 · resumen anual de IVA</h2><span class="pill ${r.result>=0?"warn":"good"}">Resultado ${eur(r.result)}</span></div><div class="tw"><table><tr><th>Tipo</th><th class="n">Base</th><th class="n">Cuota</th></tr>
+    <tr class="sub"><td colspan="3">IVA devengado · régimen general</td></tr>${rs(r.dev)}<tr><td><b>Total devengado</b></td><td class="n">${eur(r.dev.base)}</td><td class="n">${eur(r.dev.vat)}</td></tr>
+    <tr class="sub"><td colspan="3">IVA deducible · operaciones interiores</td></tr><tr><td>Bienes y servicios corrientes</td><td class="n">${eur(r2(r.sop.base-r.inv.base))}</td><td class="n">${eur(r2(r.sop.vat-r.inv.vat))}</td></tr><tr><td>Bienes de inversión</td><td class="n">${eur(r.inv.base)}</td><td class="n">${eur(r.inv.vat)}</td></tr><tr><td><b>Total deducible</b></td><td class="n">${eur(r.sop.base)}</td><td class="n">${eur(r.sop.vat)}</td></tr>
+    <tr class="tot"><td colspan="2">Resultado del ejercicio</td><td class="n">${eur(r.result)}</td></tr></table></div></div>
+    <div class="card"><h2>Comprobación con los trimestres</h2><div class="tw"><table><tr><th>Periodo</th><th class="n">Resultado del 303</th></tr>${r.q.map((v,k)=>`<tr><td>${k+1}.º trimestre</td><td class="n">${eur(v)}</td></tr>`).join("")}<tr class="tot"><td>Suma de los cuatro trimestres</td><td class="n">${eur(r2(r.q.reduce((a,v)=>a+v,0)))}</td></tr></table></div>
+    <div class="tw"><table><tr><td>Volumen de operaciones (bases de las facturas emitidas)</td><td class="n">${eur(r.dev.base)}</td></tr></table></div><p class="small muted">Los bienes de inversión son las facturas recibidas con cuenta del grupo 2. La suma de los trimestres debe coincidir con el resultado anual; las compensaciones de trimestres anteriores no se arrastran aquí. Se presenta en enero del año siguiente.</p></div></div>`;}
+  else if(q===7){const r=tax190(S,y),tb=(rows,clave)=>{let b=0,t=0;return rows.map(x=>{b=r2(b+x.base);t=r2(t+x.ret);return`<tr><td>${esc(x.name||contact(x.contactId).name)}</td><td>${esc(x.nif!=null?x.nif:contact(x.contactId).nif)}</td><td>${clave}</td><td class="n">${eur(x.base)}</td><td class="n">${eur(x.ret)}</td></tr>`;}).join("")+(rows.length?`<tr class="tot"><td colspan="3">Total · ${rows.length} perceptores</td><td class="n">${eur(b)}</td><td class="n">${eur(t)}</td></tr>`:`<tr><td colspan="5" class="muted">Sin datos en ${y}.</td></tr>`);},hd=`<tr><th>Perceptor</th><th>NIF</th><th>Clave</th><th class="n">Percepciones íntegras</th><th class="n">Retenciones</th></tr>`;
+    body=`<div class="card"><h2>Modelo 190 · resumen anual de retenciones</h2><div class="tw"><table>${hd}<tr class="sub"><td colspan="5">Rendimientos del trabajo · ${r.months} nóminas mensuales contabilizadas</td></tr>${tb(r.staff,"A")}<tr class="sub"><td colspan="5">Actividades profesionales · facturas recibidas con retención</td></tr>${tb(r.prof,"G")}</table></div>
+    <p class="small muted">Los datos de los trabajadores se estiman multiplicando el bruto y el IRPF actuales de cada ficha por el número de nóminas mensuales contabilizadas en ${y}; si hubo cambios de sueldo o altas a mitad de año, corrígelos a mano. Se presenta en enero del año siguiente.</p></div>
+    <div class="card"><h2>Modelo 180 · resumen anual de retenciones de alquileres</h2><div class="tw"><table>${hd.replace("Perceptor","Arrendador").replace("<th>Clave</th>","<th>Cuenta</th>")}${tb(r.rent,"621")}</table></div><p class="small muted">Incluye las facturas recibidas con retención y cuenta 621. Se presenta en enero del año siguiente.</p></div>`;}
+  else{const v=tax303(S,y,q),i=tax130(S,y,q),r=tax111(S,y,q),al=tax115(S,y,q),[f,t]=qRange(y,q);
     const rate=(o,k)=>`<tr><td>${k} %</td><td class="n">${eur(o.base)}</td><td class="n">${eur(o.vat)}</td></tr>`,rs=o=>Object.keys(o.rates).sort((a,b)=>b-a).map(k=>rate(o.rates[k],k)).join("");
     const plazo=["1 al 20 de abril","1 al 20 de julio","1 al 20 de octubre","1 al 30 de enero"][q-1];
     body=`<p class="muted small">Periodo ${fd(f)} a ${fd(t)}. Plazo habitual de presentación: del ${plazo}.</p><div class="grid2">
     <div class="card"><div class="head"><h2>Modelo 303 · IVA</h2><span class="pill ${v.result>=0?"warn":"good"}">${v.result>=0?"A ingresar":"A compensar"} ${eur(Math.abs(v.result))}</span></div><div class="tw"><table><tr><th>Tipo</th><th class="n">Base</th><th class="n">Cuota</th></tr><tr class="sub"><td colspan="3">IVA devengado (ventas)</td></tr>${rs(v.dev)}<tr><td><b>Total devengado</b></td><td class="n">${eur(v.dev.base)}</td><td class="n">${eur(v.dev.vat)}</td></tr><tr class="sub"><td colspan="3">IVA soportado deducible (compras y gastos)</td></tr>${rs(v.sop)}<tr><td><b>Total deducible</b></td><td class="n">${eur(v.sop.base)}</td><td class="n">${eur(v.sop.vat)}</td></tr><tr class="tot"><td colspan="2">Resultado</td><td class="n">${eur(v.result)}</td></tr></table></div><div class="row">${S.entries.some(e=>e.src==="iva:"+y+":"+q)?`<span class="pill good">Liquidación contabilizada</span><button data-act="iva-undo">Deshacer</button>`:`<button data-act="iva-post">Contabilizar liquidación de IVA</button>`}</div></div>
     <div class="card">${soc?`<h2>Impuesto sobre Sociedades</h2><p>Resultado contable acumulado hasta ${fd(t)}: <b>${eur(pnl(S,y+"-01-01",t).result)}</b>.</p><p>Estimación al tipo general del 25 %: <b>${eur(r2(Math.max(0,pnl(S,y+"-01-01",t).result)*0.25))}</b>.</p><p class="small muted">Las sociedades no presentan el modelo 130. Los pagos fraccionados van en el modelo 202 y la liquidación anual en el 200; el tipo aplicable puede ser menor para entidades de reducida dimensión o de nueva creación.</p>`
       :`<div class="head"><h2>Modelo 130 · pago fraccionado IRPF</h2><span class="pill ${i.result>0?"warn":"good"}">${i.result>0?"A ingresar "+eur(i.result):"Sin ingreso"}</span></div><div class="tw"><table><tr><td>Ingresos acumulados del año</td><td class="n">${eur(i.ing)}</td></tr><tr><td>Gastos deducibles acumulados</td><td class="n">${eur(i.gas)}</td></tr><tr><td>Rendimiento neto</td><td class="n">${eur(i.rend)}</td></tr><tr><td>20 % del rendimiento</td><td class="n">${eur(i.cuota)}</td></tr><tr><td>Retenciones soportadas acumuladas</td><td class="n">−${eur(i.ret)}</td></tr><tr><td>Pagos de trimestres anteriores</td><td class="n">−${eur(i.prev)}</td></tr><tr class="tot"><td>Resultado</td><td class="n">${eur(i.result)}</td></tr></table></div>`}
-     <h2>Modelo 111 · retenciones practicadas</h2><div class="tw"><table><tr><td>Facturas de profesionales con retención</td><td class="n">${r.n}</td></tr><tr><td>Base de las retenciones</td><td class="n">${eur(r.base)}</td></tr><tr class="tot"><td>Retenciones a ingresar</td><td class="n">${eur(r.ret)}</td></tr></table></div>
-     <p class="small muted">Este resumen suma todas las retenciones de facturas recibidas. Las de alquileres se declaran aparte, en el modelo 115.</p></div></div>`;}
-  return`<div class="head"><h1>Impuestos ${y}</h1><button data-act="tbl-csv">Exportar a Excel (.csv)</button></div><div class="tabs">${[1,2,3,4].map(k=>`<button data-act="q" data-q="${k}" class="${q===k?"on":""}">${k}.º trimestre</button>`).join("")}<button data-act="q" data-q="5" class="${q===5?"on":""}">Anual · 347</button></div>
+     <h2>Modelo 111 · retenciones de trabajo y profesionales</h2><div class="tw"><table><tr><th>Concepto</th><th class="n">Base</th><th class="n">Retención</th></tr><tr><td>Rendimientos del trabajo (nóminas contabilizadas)</td><td class="n">${eur(r.wb)}</td><td class="n">${eur(r.wr)}</td></tr><tr><td>Actividades profesionales (${r.n} facturas)</td><td class="n">${eur(r.base)}</td><td class="n">${eur(r.ret)}</td></tr><tr class="tot"><td colspan="2">Retenciones a ingresar</td><td class="n">${eur(r.total)}</td></tr></table></div>
+     <h2>Modelo 115 · retenciones de alquileres</h2><div class="tw"><table><tr><th>Concepto</th><th class="n">Base</th><th class="n">Retención</th></tr><tr class="tot"><td>Alquileres con cuenta 621 (${al.n} facturas)</td><td class="n">${eur(al.base)}</td><td class="n">${eur(al.ret)}</td></tr></table></div></div></div>`;}
+  return`<div class="head"><h1>Impuestos ${y}</h1><button data-act="tbl-csv">Exportar a Excel (.csv)</button></div><div class="tabs">${[1,2,3,4].map(k=>`<button data-act="q" data-q="${k}" class="${q===k?"on":""}">${k}.º trimestre</button>`).join("")}<button data-act="q" data-q="6" class="${q===6?"on":""}">Anual · 390</button><button data-act="q" data-q="7" class="${q===7?"on":""}">Anual · 190 y 180</button><button data-act="q" data-q="5" class="${q===5?"on":""}">Anual · 347</button></div>
   <div class="note">Cálculos orientativos a partir de tus facturas, pensados para preparar los modelos, no para presentarlos. Cuaderna no envía nada a la Agencia Tributaria. Contrasta las cifras con tu asesor antes de presentar.</div>${body}`;}
 
 /* Ajustes */
@@ -630,6 +666,12 @@ document.addEventListener("click",ev=>{const b=ev.target.closest("[data-act]");i
   else if(a==="con-edit")conForm(id);
   else if(a==="con-del"){if(S.invoices.some(i=>i.contactId===id))modal(`<div class="dlg sm"><h2>No se puede borrar</h2><p>Este contacto tiene facturas. Borra antes sus facturas.</p><div class="row" style="justify-content:flex-end"><button data-act="close">Entendido</button></div></div>`);else ask("Se borrará el contacto.","Borrar",()=>{S.contacts=S.contacts.filter(c=>c.id!==id);});}
   else if(a==="ent-new")entForm();
+  else if(a==="ent-dup"){const e=S.entries.find(x=>x.id===id);entForm({concept:e.concept,lines:e.lines.map(l=>({acc:l.acc,d:l.d,c:l.c}))});}
+  else if(a==="eline-del"){b.closest("tr").remove();updEnt();}
+  else if(a==="tpl-del"){const k=$("#e-tpl").value;if(k){S.templates=S.templates.filter(t=>String(t.id)!==k);save();$("#e-tpl").querySelector(`option[value="${k}"]`).remove();}}
+  else if(a==="acc-quick"){const code=$("#e-ncode").value.trim(),name=$("#e-nname").value.trim();if(!/^\d{3,8}$/.test(code)||!name)return fail("Para crear la cuenta escribe un código de 3 a 8 cifras y un nombre.");
+    if(S.accounts.some(x=>x.code===code))return fail("Ya existe la cuenta "+code+".");S.accounts.push({code,name});S.accounts.sort((x,y)=>x.code<y.code?-1:1);save();fail("");
+    $$(".e-acc").forEach(sel=>{const cur=sel.value;sel.innerHTML=accOpts(()=>true,cur);});$("#e-lines").insertAdjacentHTML("beforeend",entRow({acc:code}));$("#e-ncode").value="";$("#e-nname").value="";}
   else if(a==="ent-line")$("#e-lines").insertAdjacentHTML("beforeend",entRow());
   else if(a==="ent-del")ask("Se borrará este asiento manual.","Borrar",()=>{S.entries=S.entries.filter(e=>e.id!==id);});
   else if(a==="rep"){ui.rep=b.dataset.rep;render();}
@@ -640,8 +682,8 @@ document.addEventListener("click",ev=>{const b=ev.target.closest("[data-act]");i
   else if(a==="bank-new")modal(`<form class="dlg sm" data-form="bank"><h2>Nueva cuenta bancaria</h2><label>Nombre (por ejemplo, el banco)<input id="b-name" required></label><div class="row" style="justify-content:flex-end"><button type="button" data-act="close">Cancelar</button><button class="pri">Crear</button></div></form>`);
   else if(a==="iva-post"){if(settleVat(S,S.year,ui.q)){save();render();}else modal(`<div class="dlg sm"><h2>Nada que liquidar</h2><p>No hay IVA repercutido ni soportado pendiente hasta el final de este trimestre.</p><div class="row" style="justify-content:flex-end"><button data-act="close">Cerrar</button></div></div>`);}
   else if(a==="iva-undo"){dropEntries(S,"iva:"+S.year+":"+ui.q);save();render();}
-  else if(a==="year-close")ask("Se creará el asiento de regularización a 31/12/"+S.year+": las cuentas de ingresos y gastos se saldan contra la 129.","Cerrar ejercicio",()=>closeYear(S,S.year));
-  else if(a==="year-open"){dropEntries(S,"reg:"+S.year);save();render();}
+  else if(a==="year-close")ask("Se crearán tres asientos: regularización de ingresos y gastos y cierre a 31/12/"+S.year+", y apertura a 01/01/"+(S.year+1)+". Podrás deshacerlo.","Cerrar ejercicio",()=>closeYear(S,S.year));
+  else if(a==="year-open"){for(const p of["reg:","cie:","ape:"])dropEntries(S,p+S.year);save();render();}
   else if(a==="dep-post"){const n=postDep(S,S.year);save();render();modal(`<div class="dlg sm"><h2>Amortización ${S.year}</h2><p>${n?n+" asientos de amortización contabilizados a 31/12/"+S.year+".":"No hay cuota que amortizar este año."}</p><div class="row" style="justify-content:flex-end"><button data-act="close">Cerrar</button></div></div>`);}
   else if(a==="asset-new")modal(`<form class="dlg sm" data-form="asset"><h2>Nuevo activo fijo</h2><div class="form"><label>Descripción<input id="x-name" required></label><label>Fecha de alta<input id="x-date" type="date" required value="${TODAY}"></label><label>Coste (sin IVA)<input id="x-cost" type="number" step="any" min="0.01" required></label><label>Vida útil (años)<input id="x-years" type="number" step="1" min="1" required value="4"></label><label>Cuenta<select id="x-acc">${accOpts(c=>c.code[0]==="2"&&c.code.slice(0,2)!=="28","217")}</select></label></div><div class="row" style="justify-content:flex-end"><button type="button" data-act="close">Cancelar</button><button class="pri">Guardar</button></div></form>`);
   else if(a==="asset-del")ask("Se borrará el activo y sus asientos de amortización.","Borrar",()=>{S.entries=S.entries.filter(e=>!e.src.startsWith("amo:"+id+":"));S.assets=S.assets.filter(x=>x.id!==id);});
@@ -672,7 +714,7 @@ document.addEventListener("submit",ev=>{ev.preventDefault();const k=ev.target.da
   if(k==="invoice")saveInvoice();
   else if(k==="pay"){payInvoice(S,S.invoices.find(i=>i.id===+v("p-id")),v("p-date"),v("p-bank"));done();}
   else if(k==="contact"){let c=S.contacts.find(x=>x.id===+v("c-id"));if(!c){c={id:S.seq++};S.contacts.push(c);}Object.assign(c,{type:v("c-type"),name:v("c-name"),nif:v("c-nif"),email:v("c-email"),address:v("c-address")});done();}
-  else if(k==="entry"){const ls=readEnt(),d=r2(ls.reduce((a,l)=>a+l.d,0)),c=r2(ls.reduce((a,l)=>a+l.c,0));if(!ls.length||d!==c)return fail("El asiento debe tener importes y cuadrar: debe = haber.");addEntry(S,v("e-date"),v("e-concept"),ls,"");done();}
+  else if(k==="entry"){const ls=readEnt(),d=r2(ls.reduce((a,l)=>a+l.d,0)),c=r2(ls.reduce((a,l)=>a+l.c,0));if(!ls.length||d!==c)return fail("El asiento debe tener importes y cuadrar: debe = haber.");if($("#e-save").checked)S.templates.push({id:"u"+S.seq++,name:v("e-concept"),concept:v("e-concept"),lines:$$("#e-lines tr").map(tr=>({acc:$(".e-acc",tr).value,d:+$(".e-d",tr).value||0,c:+$(".e-c",tr).value||0}))});addEntry(S,v("e-date"),v("e-concept"),ls,"");done();}
   else if(k==="mov"){const amt=r2(+v("m-amount")),bk=v("m-bank"),ac=v("m-acc"),isIn=v("m-type")==="in";addEntry(S,v("m-date"),v("m-concept"),isIn?[{acc:bk,d:amt},{acc:ac,c:amt}]:[{acc:ac,d:amt},{acc:bk,c:amt}],"");ui.bank=bk;done();}
   else if(k==="doc"){const side=ev.target.dataset.side,lines=readLines();let cid=+v("f-contact");if(!lines.length)return fail("Añade al menos una línea.");
     if(!cid){const name=v("f-newname");if(!name)return fail("Elige un contacto o escribe el nombre del nuevo.");const c={id:S.seq++,type:side==="venta"?"cliente":"proveedor",name,nif:"",address:"",email:""};S.contacts.push(c);cid=c.id;}
@@ -700,6 +742,7 @@ document.addEventListener("change",ev=>{const t=ev.target;
   if(t.classList.contains("chk")){const e=S.entries.find(x=>x.id===+t.dataset.e);if(e){e.lines[+t.dataset.k].ok=t.checked;save();render();}}
   if(t.id==="co-sel"){if(t.value==="+"){const c=blank(now.getFullYear());c.company.name="Nueva empresa";addBank(c,"Cuenta corriente");newCompany(c);location.hash="ajustes";}else useCompany(t.value);}
   if(t.id==="lq"){ui.lq=+t.value;render();}
+  if(t.id==="e-tpl"&&t.value){const tp=S.templates.find(x=>String(x.id)===t.value);$("#e-concept").value=tp.concept;$("#e-lines").innerHTML=tp.lines.map(entRow).join("");updEnt();}
   if(t.id==="imp"&&t.files[0]){const fr=new FileReader();fr.onload=()=>{let d=null;try{d=JSON.parse(fr.result);}catch(e){}
     const okS=x=>x&&Array.isArray(x.entries)&&Array.isArray(x.invoices)&&Array.isArray(x.accounts)&&x.company;
     if(d&&d.companies&&Object.keys(d.companies).length&&Object.values(d.companies).every(okS))ask("El archivo contiene "+Object.keys(d.companies).length+" empresas. Se sustituirán todas las empresas actuales por las del archivo.","Sustituir todo",()=>{DB=d;if(!DB.companies[DB.current])DB.current=Object.keys(DB.companies)[0];S=DB.companies[DB.current];ensure();});
