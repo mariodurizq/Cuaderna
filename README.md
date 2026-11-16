@@ -10,7 +10,7 @@ Contabilidad, facturación y gestión para autónomos y pequeñas empresas en un
 
 Los datos se guardan solo en el navegador de ese ordenador. Exporta una copia de seguridad (`Ajustes y copias → Exportar todas las empresas`) cada día que trabajes.
 
-El manual completo está en [`Manual-Cuaderna.pdf`](Manual-Cuaderna.pdf).
+El manual completo está en [`Manual-Cuaderna.pdf`](Manual-Cuaderna.pdf). Las novedades de la última versión están en [`Novedades-Cuaderna.pdf`](Novedades-Cuaderna.pdf).
 
 ## Qué incluye
 
@@ -21,6 +21,8 @@ El manual completo está en [`Manual-Cuaderna.pdf`](Manual-Cuaderna.pdf).
 - Fiscal: resumen orientativo de los modelos 303, 130, 111 y 115 y de los anuales 390, 190, 180 y 347.
 - Proyectos, empleados y asiento de nóminas.
 - Varias empresas en el mismo programa, cada una con sus datos.
+- Plan de cuentas con subcuentas de 6 dígitos: una cuenta por cliente y por proveedor, IVA separado por tipos, alta y borrado de cuentas.
+- Diario, mayor y balances por rango de fechas; mayor por cuenta, grupo o rango de cuentas.
 - Libros registro de IVA, exportación de informes a CSV e importación de facturas desde CSV.
 - Modo claro y oscuro.
 
