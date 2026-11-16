@@ -21,7 +21,8 @@ El manual completo está en [`Manual-Cuaderna.pdf`](Manual-Cuaderna.pdf). Las no
 - Fiscal: resumen orientativo de los modelos 303, 130, 111 y 115 y de los anuales 390, 190, 180 y 347.
 - Proyectos, empleados y asiento de nóminas.
 - Varias empresas en el mismo programa, cada una con sus datos.
-- Plan de cuentas con subcuentas de 6 dígitos: una cuenta por cliente y por proveedor, IVA separado por tipos, alta y borrado de cuentas.
+- Plan de cuentas con subcuentas de 6 a 10 dígitos por empresa: una cuenta por cliente y por proveedor, IVA separado por tipos, alta, borrado y cambio de número de cuentas.
+- Edición de asientos manuales.
 - Diario, mayor y balances por rango de fechas; mayor por cuenta, grupo o rango de cuentas.
 - Libros registro de IVA, exportación de informes a CSV e importación de facturas desde CSV.
 - Modo claro y oscuro.
