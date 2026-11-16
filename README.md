@@ -10,7 +10,7 @@ Contabilidad, facturación y gestión para autónomos y pequeñas empresas en un
 
 Los datos se guardan solo en el navegador de ese ordenador. Exporta una copia de seguridad (`Ajustes y copias → Exportar todas las empresas`) cada día que trabajes.
 
-El manual completo está en [`Manual-Cuaderna.pdf`](Manual-Cuaderna.pdf).
+El manual completo está en [`Manual-Cuaderna.pdf`](Manual-Cuaderna.pdf). Las novedades de la última versión están en [`Novedades-Cuaderna.pdf`](Novedades-Cuaderna.pdf).
 
 ## Qué incluye
 
