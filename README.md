@@ -22,7 +22,9 @@ El manual completo está en [`Manual-Cuaderna.pdf`](Manual-Cuaderna.pdf). Las no
 - Proyectos, empleados y asiento de nóminas.
 - Varias empresas en el mismo programa, cada una con sus datos.
 - Plan de cuentas con subcuentas de 6 a 10 dígitos por empresa: una cuenta por cliente y por proveedor, IVA separado por tipos, alta, borrado y cambio de número de cuentas.
-- Edición de asientos manuales.
+- Pantalla de Asientos: asientos libres y facturas recibidas o emitidas con el asiento a la vista, búsqueda de asientos y corrección.
+- Búsqueda de cuentas, clientes y proveedores mientras se escribe.
+- Ficha de clientes y proveedores con NIF obligatorio y comprobado.
 - Diario, mayor y balances por rango de fechas; mayor por cuenta, grupo o rango de cuentas.
 - Libros registro de IVA, exportación de informes a CSV e importación de facturas desde CSV.
 - Modo claro y oscuro.

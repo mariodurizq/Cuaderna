@@ -81,6 +81,14 @@ label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600;
 .tabs button.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:600}
 .banner{background:var(--warn-soft);color:var(--warn);border-radius:8px;padding:10px 14px;font-size:14px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
 .note{background:var(--accent-soft);border-radius:8px;padding:10px 14px;font-size:13.5px;max-width:75ch}
+.pk{position:relative;min-width:0}
+.pk-list{position:fixed;z-index:30;max-height:280px;overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:6px;box-shadow:0 6px 24px rgba(0,0,0,.18)}
+.pk-it{padding:7px 10px;cursor:pointer;font-size:14px;display:flex;gap:8px;justify-content:space-between}
+.pk-it small{color:var(--muted);white-space:nowrap}
+.pk-it.on,.pk-it:hover{background:var(--accent-soft)}
+.pk-more{padding:6px 10px;font-size:12px;color:var(--muted)}
+#ed{border-color:var(--accent)}
+.flash{background:var(--good-soft);color:var(--good);border-radius:6px;padding:8px 12px;font-size:14px;font-weight:600}
 #modal{position:fixed;inset:0;background:rgba(10,20,20,.55);display:none;align-items:flex-start;justify-content:center;padding:24px 16px;overflow:auto;z-index:10}
 #modal.open{display:flex}
 .dlg{background:var(--surface);border-radius:10px;padding:20px;width:min(860px,100%);display:flex;flex-direction:column;gap:14px;border:1px solid var(--line)}
@@ -130,11 +138,11 @@ const PGC=[["100","Capital social"],["102","Capital"],["112","Reserva legal"],["
 ["300","Mercaderías"],["400","Proveedores"],["410","Acreedores por prestaciones de servicios"],["430","Clientes"],["465","Remuneraciones pendientes de pago"],["4700","HP, deudora por IVA"],
 ["472","HP, IVA soportado"],["473","HP, retenciones y pagos a cuenta"],["4750","HP, acreedora por IVA"],["4751","HP, acreedora por retenciones practicadas"],["4752","HP, acreedora por impuesto sobre sociedades"],
 ["476","Organismos de la Seguridad Social, acreedores"],["477","HP, IVA repercutido"],["520","Deudas a corto plazo con entidades de crédito"],["550","Titular de la explotación"],
-["570","Caja, euros"],["600","Compras de mercaderías"],["621","Arrendamientos y cánones"],["622","Reparaciones y conservación"],["623","Servicios de profesionales independientes"],
+["570","Caja, euros"],["572","Bancos e instituciones de crédito c/c vista, euros"],["600","Compras de mercaderías"],["621","Arrendamientos y cánones"],["622","Reparaciones y conservación"],["623","Servicios de profesionales independientes"],
 ["624","Transportes"],["625","Primas de seguros"],["626","Servicios bancarios"],["627","Publicidad y relaciones públicas"],["628","Suministros"],["629","Otros servicios"],
 ["630","Impuesto sobre beneficios"],["631","Otros tributos"],["640","Sueldos y salarios"],["642","Seguridad Social a cargo de la empresa"],["662","Intereses de deudas"],["681","Amortización del inmovilizado material"],
 ["700","Ventas de mercaderías"],["705","Prestaciones de servicios"],["759","Ingresos por servicios diversos"],["769","Otros ingresos financieros"]];
-const PGCV=2;let DIG=6;
+const PGCV=3;let DIG=6;
 function x6(c){c=String(c);if(c.length>=DIG)return c;if(c.length===5&&c.startsWith("572"))return"572"+pad(+c.slice(3),DIG-3);return c.padEnd(DIG,"0");}
 function remapAccounts(S,map){const mp=c=>c==null?c:(map[c]!==undefined?map[c]:c),keep={};
   for(const a of S.accounts){const n=mp(a.code);if(!keep[n]||a.code===n)keep[n]={code:n,name:keep[n]&&a.code!==n?keep[n].name:a.name};}
@@ -166,6 +174,16 @@ function migrate6(S){DIG=6;const map={},used=new Set();for(const a of S.accounts
   S.entries=S.entries.filter(e=>!/^(iva|reg|cie|ape):/.test(e.src));const fb=(S.banks[0]||{}).acc||x6("570");
   for(const i of S.invoices){postInvoice(S,i);if(i.paid){payInvoice(S,i,i.paid,i.bank||fb);if(okPay["pay:"+i.id])for(const l of S.entries[S.entries.length-1].lines)if(l.acc.startsWith("57"))l.ok=true;}}
   for(const[y,q]of ivas)settleVat(S,y,q);for(const y of closed)closeYear(S,y);}
+const NIFL="TRWAGMYFPDXBNJZSQVHLCKE";
+function nifNorm(n){return String(n||"").toUpperCase().replace(/[\s.\-\/]/g,"");}
+function nifCheck(n){n=nifNorm(n);if(!n)return"empty";let m=/^(\d{8})([A-Z])$/.exec(n);if(m)return NIFL[+m[1]%23]===m[2]?"ok":"bad";
+  m=/^([XYZ])(\d{7})([A-Z])$/.exec(n);if(m)return NIFL[+("XYZ".indexOf(m[1])+m[2])%23]===m[3]?"ok":"bad";
+  m=/^([KLM])(\d{7})([A-Z])$/.exec(n);if(m)return NIFL[+m[2]%23]===m[3]?"ok":"bad";
+  m=/^([ABCDEFGHJNPQRSUVW])(\d{7})([0-9A-J])$/.exec(n);if(m){let a=0,b=0;for(let i=0;i<7;i++){const x=+m[2][i];if(i%2===0){const y=x*2;b+=Math.floor(y/10)+y%10;}else a+=x;}
+    const c=(10-(a+b)%10)%10,ch="JABCDEFGHI"[c];if("PQRSNW".includes(m[1]))return m[3]===ch?"ok":"bad";if("ABEH".includes(m[1]))return m[3]===String(c)?"ok":"bad";return m[3]===String(c)||m[3]===ch?"ok":"bad";}
+  return"bad";}
+function mkCif(L,d){let a=0,b=0;for(let i=0;i<7;i++){const x=+d[i];if(i%2===0){const y=x*2;b+=Math.floor(y/10)+y%10;}else a+=x;}const c=(10-(a+b)%10)%10;return L+d+("PQRSNW".includes(L)?"JABCDEFGHI"[c]:String(c));}
+function mkDni(d){return d+NIFL[+d%23];}
 function blank(year){return{v:1,seq:1,year,sample:false,company:{name:"Mi empresa",nif:"",address:"",type:"autonomo"},
   digits:DIG,pgcv:PGCV,accounts:PGC.map(([code,name])=>({code:x6(code),name})),contacts:[],invoices:[],entries:[],banks:[],assets:[],budgets:{},items:[],moves:[],docs:[],contracts:[],opps:[],projects:[],staff:[],templates:defTemplates()};}
 function defTemplates(){const T=(name,accs)=>({id:"t"+name.length+accs.length+accs[0],name,concept:name,lines:accs.map(a=>({acc:x6(a),d:0,c:0}))});
@@ -238,8 +256,11 @@ function tax390(S,y){const qs=[1,2,3,4].map(k=>tax303(S,y,k)),agg=key=>{const r=
 function tax190(S,y){const prof={},rent={};for(const i of invIn(S,"recibida",y+"-01-01",y+"-12-31")){const x=invTotals(i);if(!x.irpf)continue;const g=i.account.startsWith("621")?rent:prof,o=g[i.contactId]||(g[i.contactId]={contactId:i.contactId,base:0,ret:0});o.base=r2(o.base+x.base);o.ret=r2(o.ret+x.irpf);}
   let months=0;for(const e of S.entries)if(e.src.startsWith("nom:"+y+":"))months++;
   return{prof:Object.values(prof),rent:Object.values(rent),months,staff:months?S.staff.map(e=>({name:e.name,nif:e.nif,base:r2(e.gross*months),ret:r2(r2(e.gross*e.irpf/100)*months)})):[]};}
-function tax347(S,y){const m={};for(const i of S.invoices){if(i.date.slice(0,4)!==String(y)||i.irpf>0)continue;const x=invTotals(i),k=i.contactId+"|"+i.kind,o=m[k]||(m[k]={contactId:i.contactId,kind:i.kind,total:0,q:[0,0,0,0]}),v=r2(x.base+x.vat),qi=Math.floor((+i.date.slice(5,7)-1)/3);o.total=r2(o.total+v);o.q[qi]=r2(o.q[qi]+v);}
+function tax347(S,y){const m={};for(const i of S.invoices){if(i.date.slice(0,4)!==String(y)||i.irpf>0)continue;const c=S.contacts.find(x=>x.id===i.contactId)||{},nif=nifNorm(c.nif),x=invTotals(i),
+    k=(nif||"id"+i.contactId)+"|"+i.kind,o=m[k]||(m[k]={contactId:i.contactId,ids:[],nif:c.nif||"",name:c.name||"",province:c.province||"",kind:i.kind,total:0,q:[0,0,0,0]}),v=r2(x.base+x.vat),qi=Math.floor((+i.date.slice(5,7)-1)/3);
+    if(!o.ids.includes(i.contactId))o.ids.push(i.contactId);o.total=r2(o.total+v);o.q[qi]=r2(o.q[qi]+v);}
   return Object.values(m).filter(o=>Math.abs(o.total)>3005.06).sort((a,b)=>b.total-a.total);}
+
 function settleVat(S,y,q){const src="iva:"+y+":"+q;dropEntries(S,src);const[,t]=qRange(y,q),m=balances(S,null,t,"cie:"+y),ls=[];let df=0;
   for(const k of Object.keys(m).sort().reverse()){if(!k.startsWith("477")&&!k.startsWith("472"))continue;const v=r2(m[k].d-m[k].c);if(!v)continue;df=r2(df-v);ls.push(v>0?{acc:k,c:v}:{acc:k,d:-v});}
   if(!ls.length)return null;if(df)ls.push(df>0?{acc:x6("4750"),c:df}:{acc:x6("4700"),d:-df});return addEntry(S,t,"Liquidación de IVA "+q+"T "+y,ls,src);}
@@ -299,9 +320,9 @@ function reconcile(S,acc,rows){const un=[];let n=0;for(const r of rows){let hit=
 function nextNumber(S,y){let mx=0;for(const i of S.invoices)if(i.kind==="emitida"){const m=/^(\d{4})-(\d+)$/.exec(i.number);if(m&&+m[1]===y)mx=Math.max(mx,+m[2]);}return y+"-"+pad(mx+1,4);}
 function addBank(S,name){let n=1;while(S.accounts.some(a=>a.code==="572"+pad(n,DIG-3)))n++;const acc=addAcc(S,"572"+pad(n,DIG-3),"Banco: "+name),b={id:S.seq++,name,acc};S.banks.push(b);return b;}
 function sample(y,todayIso){const S=blank(y);S.sample=true;S.company={name:"Estudio Ejemplo (datos de muestra)",nif:"00000000T",address:"Calle de Ejemplo 1, 28000 Madrid",type:"autonomo"};
-  const C=(type,name,nif)=>{const c={id:S.seq++,type,name,nif,address:"",email:""};S.contacts.push(c);contactAcc(S,c.id);return c;};
-  const cl=[C("cliente","Cliente Alfa SL","B00000001"),C("cliente","Cliente Beta SA","A00000002"),C("cliente","Cliente Gamma SL","B00000003"),C("cliente","Particular Delta","00000004D")];
-  const pr=[C("proveedor","Alquileres Ejemplo SL","B00000005"),C("proveedor","Suministros Ejemplo SA","A00000006"),C("proveedor","Gestoría Ejemplo","00000007G"),C("proveedor","Material Ejemplo SL","B00000008")];
+  const C=(type,name,nif,city,province)=>{const c={id:S.seq++,type,name,nif,address:"Calle de Ejemplo, 1",cp:"28001",city:city||"Madrid",province:province||"Madrid",country:"España",phone:"",email:""};S.contacts.push(c);contactAcc(S,c.id);return c;};
+  const cl=[C("cliente","Cliente Alfa SL",mkCif("B","0000001")),C("cliente","Cliente Beta SA",mkCif("A","0000002"),"Toledo","Toledo"),C("cliente","Cliente Gamma SL",mkCif("B","0000003")),C("cliente","Particular Delta",mkDni("00000004"),"Alcalá de Henares","Madrid")];
+  const pr=[C("proveedor","Alquileres Ejemplo SL",mkCif("B","0000005")),C("proveedor","Suministros Ejemplo SA",mkCif("A","0000006")),C("proveedor","Gestoría Ejemplo",mkDni("00000007"),"Getafe","Madrid"),C("proveedor","Material Ejemplo SL",mkCif("B","0000008"),"Guadalajara","Guadalajara")];
   const bank=addBank(S,"Cuenta corriente");
   addEntry(S,y+"-01-02","Aportación inicial del titular",[{acc:bank.acc,d:6000},{acc:x6("102"),c:6000}],"");
   const lastM=todayIso.slice(0,4)===String(y)?+todayIso.slice(5,7):12;
@@ -366,9 +387,9 @@ const yr=()=>[S.year+"-01-01",S.year+"-12-31"];
 const inYear=i=>i.date.slice(0,4)===String(S.year);
 const VIEWS=[["","Resumen"],["panel","Panel"],["","Ventas"],["docsv","Ofertas, pedidos y albaranes"],["ventas","Facturas emitidas"],["contratos","Contratos"],["crm","Oportunidades"],
  ["","Compras y almacén"],["docsc","Pedidos y albaranes de compra"],["compras","Facturas recibidas"],["articulos","Artículos y stock"],
- ["","Tesorería"],["cartera","Cartera de cobros y pagos"],["bancos","Bancos y caja"],["","Contabilidad"],["diario","Libro diario"],["informes","Mayor y balances"],["activos","Activos fijos"],["presupuesto","Presupuesto"],
+ ["","Tesorería"],["cartera","Cartera de cobros y pagos"],["bancos","Bancos y caja"],["","Contabilidad"],["asientos","Asientos"],["diario","Libro diario"],["informes","Mayor y balances"],["activos","Activos fijos"],["presupuesto","Presupuesto"],
  ["","Organización"],["contactos","Clientes y proveedores"],["proyectos","Proyectos"],["personal","Personal y nóminas"],["","Fiscal"],["impuestos","Impuestos"],["","Sistema"],["ajustes","Ajustes y copias"]];
-let ui={lvl:0,lq:0,doc:{venta:"oferta",compra:"pedido"},rep:"sumas",mayor:"430",q:Math.floor(now.getMonth()/3)+1,bank:null,filter:""};
+let ui={bsl:0,cq:"",ct:"",asq:"",ed:null,flash:"",pq:"",lvl:0,lq:0,doc:{venta:"oferta",compra:"pedido"},rep:"sumas",mayor:"430",q:Math.floor(now.getMonth()/3)+1,bank:null,filter:""};
 function view(){const h=location.hash.replace("#","");return VIEWS.some(v=>v[0]===h&&h)?h:"panel";}
 function render(){const v=view();
   themeLabel();$("#co-name").textContent="Ejercicio "+S.year;
@@ -378,7 +399,9 @@ function render(){const v=view();
   const warn=(saveErr?`<div class="banner" style="background:var(--bad-soft);color:var(--bad)"><span>No se han podido guardar los cambios en este navegador. Exporta una copia ahora para no perder el trabajo.</span><button data-act="export-all">Exportar todo</button></div>`:"")
     +(!S.sample&&S.entries.length&&days>=7?`<div class="banner"><span>Hace ${days} días que no exportas una copia de seguridad.</span><button data-act="export-all">Exportar ahora</button></div>`:"");
   const banner=warn+(S.sample?`<div class="banner"><span>Estás viendo datos de ejemplo. Bórralos para empezar con tu contabilidad real.</span><button data-act="wipe">Empezar en blanco</button></div>`:"");
-  $("#main").innerHTML=banner+({panel:vPanel,ventas:()=>vInvoices("emitida"),compras:()=>vInvoices("recibida"),contactos:vContacts,docsv:()=>vDocs("venta"),docsc:()=>vDocs("compra"),articulos:vArticulos,contratos:vContratos,crm:vCRM,proyectos:vProyectos,personal:vPersonal,cartera:vCartera,activos:vActivos,presupuesto:vPresupuesto,diario:vDiario,informes:vInformes,bancos:vBancos,impuestos:vImpuestos,ajustes:vAjustes}[v])();
+  const keep=$("#ed");$("#main").innerHTML=banner+({panel:vPanel,ventas:()=>vInvoices("emitida"),compras:()=>vInvoices("recibida"),contactos:vContacts,docsv:()=>vDocs("venta"),docsc:()=>vDocs("compra"),articulos:vArticulos,contratos:vContratos,crm:vCRM,proyectos:vProyectos,personal:vPersonal,cartera:vCartera,activos:vActivos,presupuesto:vPresupuesto,asientos:vAsientos,diario:vDiario,informes:vInformes,bancos:vBancos,impuestos:vImpuestos,ajustes:vAjustes}[v])();
+  const nw=$("#ed");if(keep&&nw&&keep.dataset.key===nw.dataset.key)nw.replaceWith(keep);
+  if(v==="asientos")edInit();
 }
 function status(i){if(i.paid)return`<span class="pill good">${i.kind==="emitida"?"Cobrada":"Pagada"}</span>`;
   if(i.due&&i.due<TODAY)return`<span class="pill bad">Vencida</span>`;return`<span class="pill warn">Pendiente</span>`;}
@@ -391,7 +414,7 @@ function vPanel(){const[f,t]=yr();const p=pnl(S,f,t),m=balances(S,null,t,"cie:"+
   const months=Array.from({length:12},(_,k)=>{const mm=S.year+"-"+pad(k+1,2);let a=0,b=0;
     for(const i of S.invoices){if(i.date.slice(0,7)!==mm)continue;const x=invTotals(i).base;if(i.kind==="emitida")a=r2(a+x);else b=r2(b+x);}return{a,b};});
   const due=S.invoices.filter(i=>!i.paid&&i.due&&i.due<TODAY).sort((a,b)=>a.due<b.due?-1:1);
-  return`<div class="head"><h1>Panel ${S.year}</h1><div class="row"><button class="pri" data-act="inv-new" data-kind="emitida">Nueva factura</button><button data-act="inv-new" data-kind="recibida">Registrar gasto</button></div></div>
+  return`<div class="head"><h1>Panel ${S.year}</h1><div class="row"><a class="btn" href="#asientos" style="text-decoration:none">Nuevo asiento</a><button class="pri" data-act="inv-new" data-kind="emitida">Nueva factura</button><button data-act="inv-new" data-kind="recibida">Registrar gasto</button></div></div>
   <div class="kpis">
    <div class="kpi"><span>Ingresos</span><b>${eur(p.ti)}</b></div><div class="kpi"><span>Gastos</span><b>${eur(p.te)}</b></div>
    <div class="kpi"><span>Resultado</span><b>${eur(p.result)}</b></div><div class="kpi"><span>Tesorería</span><b>${eur(cash)}</b></div>
@@ -427,34 +450,45 @@ function vInvoices(kind){const em=kind==="emitida",q=ui.filter.toLowerCase();
 function accOpts(filter,sel){return S.accounts.filter(filter).map(a=>`<option value="${a.code}" ${a.code===sel?"selected":""}>${a.code} ${esc(a.name)}</option>`).join("");}
 function bankOpts(sel){if(!sel){const f=S.accounts.find(a=>a.code.slice(0,3)==="572");sel=ui.bank||(f&&f.code);}return S.accounts.filter(a=>a.code.slice(0,2)==="57").map(a=>`<option value="${a.code}" ${a.code===sel?"selected":""}>${esc(a.name)}</option>`).join("");}
 function lineRow(l){return`<tr data-item="${l.itemId||""}"><td><input class="l-desc" value="${esc(l.desc)}" aria-label="Concepto"></td><td style="width:90px"><input class="l-qty" type="number" step="any" value="${l.qty}" aria-label="Cantidad"></td><td style="width:120px"><input class="l-price" type="number" step="any" value="${l.price}" aria-label="Precio"></td><td style="width:90px"><select class="l-vat" aria-label="IVA">${[21,10,4,0].map(v=>`<option ${v===l.vat?"selected":""}>${v}</option>`).join("")}</select></td><td style="width:40px"><button type="button" class="link" data-act="line-del" aria-label="Quitar línea">✕</button></td></tr>`;}
-function invForm(kind,inv){const em=kind==="emitida",type=em?"cliente":"proveedor";
-  inv=inv||{id:0,kind,number:em?nextNumber(S,+TODAY.slice(0,4)):"",date:TODAY,due:addDays(TODAY,30),contactId:0,account:x6(em?"705":"629"),irpf:0,lines:[{desc:"",qty:1,price:0,vat:21}]};
-  modal(`<form class="dlg" data-form="invoice"><h2>${inv.id?"Editar":"Nueva"} factura ${kind}</h2><input type="hidden" id="f-id" value="${inv.id}"><input type="hidden" id="f-kind" value="${kind}">
-  <div class="form"><label>Número<input id="f-number" required value="${esc(inv.number)}"></label><label>Fecha<input id="f-date" type="date" required value="${inv.date}"></label><label>Vencimiento<input id="f-due" type="date" value="${inv.due||""}"></label>
-  <label>${em?"Cliente":"Proveedor"}<select id="f-contact"><option value="0">Nuevo…</option>${S.contacts.filter(c=>c.type===type).map(c=>`<option value="${c.id}" ${c.id===inv.contactId?"selected":""}>${esc(c.name)}</option>`).join("")}</select></label>
+function invFormHtml(kind,inv,inline){const em=kind==="emitida",type=em?"cliente":"proveedor",c=S.contacts.find(x=>x.id===inv.contactId);
+  return`<form class="${inline?"":"dlg"}" data-form="invoice" style="display:flex;flex-direction:column;gap:14px">${inline?"":`<h2>${inv.id?"Editar":"Nueva"} factura ${kind}</h2>`}<input type="hidden" id="f-id" value="${inv.id}"><input type="hidden" id="f-kind" value="${kind}">
+  <div class="form"><label>${em?"Cliente":"Proveedor"}${pk(type,"f-contact","",inv.contactId||0,c?c.name:"","Escribe el nombre, el NIF o la cuenta")}</label><label>Número de factura<input id="f-number" required value="${esc(inv.number)}"></label><label>Fecha<input id="f-date" type="date" required value="${inv.date}"></label><label>Vencimiento<input id="f-due" type="date" value="${inv.due||""}"></label>
   <label>Nombre (si es nuevo)<input id="f-newname"></label><label>NIF (si es nuevo)<input id="f-newnif"></label>
-  <label>Cuenta de ${em?"ingreso":"gasto"}<select id="f-account">${accOpts(a=>a.code[0]===(em?"7":"6")||(!em&&a.code[0]==="2"),inv.account)}</select></label>
+  <label>Cuenta de ${em?"ingreso":"gasto o inmovilizado"}${pk(em?"acc:7":"acc:6,2","f-account","",inv.account,accLabel(inv.account),"Escribe código o nombre")}</label>
   <label>Retención IRPF %<input id="f-irpf" type="number" step="any" min="0" value="${inv.irpf||0}"></label>
   <label>Centro de coste o proyecto<input id="f-center" list="centers" value="${esc(inv.center||"")}"><datalist id="centers">${[...new Set(S.invoices.map(i=>i.center).filter(Boolean))].map(c=>`<option value="${esc(c)}">`).join("")}</datalist></label></div>
-  <div class="tw"><table><thead><tr><th>Concepto</th><th>Cant.</th><th>Precio</th><th>IVA %</th><th></th></tr></thead><tbody id="f-lines">${inv.lines.map(lineRow).join("")}</tbody></table></div>
+  <div class="tw"><table><thead><tr><th>Concepto</th><th>Cant.</th><th>Precio (base)</th><th>IVA %</th><th></th></tr></thead><tbody id="f-lines">${inv.lines.map(lineRow).join("")}</tbody></table></div>
   <div class="row" style="justify-content:space-between"><div class="row"><button type="button" data-act="line-add">Añadir línea</button>${itemPick(em)}</div><div id="f-tot" class="small"></div></div>
-  <div class="err" id="f-err"></div><div class="row" style="justify-content:flex-end"><button type="button" data-act="close">Cancelar</button><button class="pri">Guardar y contabilizar</button></div></form>`);
-  updTot();}
+  <div id="f-prev"></div>
+  <div class="err" id="f-err"></div><div class="row" style="justify-content:flex-end">${inline?`<button type="button" data-act="ed-cancel">${inv.id?"Cancelar la edición":"Limpiar"}</button>`:`<button type="button" data-act="close">Cancelar</button>`}<button class="pri">${inv.id?"Guardar cambios":"Guardar y contabilizar"}</button></div></form>`;}
+function newInv(kind){const em=kind==="emitida";return{id:0,kind,number:em?nextNumber(S,+TODAY.slice(0,4)):"",date:TODAY,due:addDays(TODAY,30),contactId:0,account:x6(em?"705":"629"),irpf:0,lines:[{desc:"",qty:1,price:0,vat:21}]};}
+function invForm(kind,inv){modal(invFormHtml(kind,inv||newInv(kind),false));updTot();}
 function readLines(){return $$("#f-lines tr").map(tr=>({desc:$(".l-desc",tr).value.trim(),qty:+$(".l-qty",tr).value||0,price:+$(".l-price",tr).value||0,vat:+$(".l-vat",tr).value,itemId:+tr.dataset.item||0})).filter(l=>l.desc||l.qty*l.price);}
 function updTot(){if(!$("#f-tot"))return;const t=invTotals({lines:readLines(),irpf:+($("#f-irpf")||{}).value||0});
-  $("#f-tot").innerHTML=`Base <b>${eur(t.base)}</b> · IVA <b>${eur(t.vat)}</b>${t.irpf?` · IRPF <b>−${eur(t.irpf)}</b>`:""} · Total <b>${eur(t.total)}</b>`;}
+  $("#f-tot").innerHTML=`Base <b>${eur(t.base)}</b> · IVA <b>${eur(t.vat)}</b>${t.irpf?` · IRPF <b>−${eur(t.irpf)}</b>`:""} · Total <b>${eur(t.total)}</b>`;
+  const pv=$("#f-prev");if(!pv||!$("#f-kind"))return;const em=$("#f-kind").value==="emitida",cid=+$("#f-contact").value,c=S.contacts.find(x=>x.id===cid),
+    ca=c?(c.acc||"(cuenta nueva)"):($("#f-newname").value.trim()?(em?"430":"400")+"… nueva":"—"),cn=c?c.name:$("#f-newname").value.trim(),acc=$("#f-account").value,
+    rates=Object.keys(t.byRate).filter(k=>t.byRate[k].vat).sort((a,b)=>a-b),va=r=>(em?"477":"472")+pad(r,S.digits-3),L=[];
+  if(em){L.push([ca,cn,t.total,0]);if(t.irpf)L.push([x6("473"),accName(x6("473")),t.irpf,0]);L.push([acc,accName(acc),0,t.base]);rates.forEach(r=>L.push([va(r),"IVA repercutido "+r+" %",0,t.byRate[r].vat]));}
+  else{L.push([acc,accName(acc),t.base,0]);rates.forEach(r=>L.push([va(r),"IVA soportado "+r+" %",t.byRate[r].vat,0]));L.push([ca,cn,0,t.total]);if(t.irpf)L.push([x6("4751"),accName(x6("4751")),0,t.irpf]);}
+  pv.innerHTML=t.base?`<div class="small muted" style="margin-bottom:4px">Asiento que se generará</div><div class="tw"><table class="small"><tr><th>Cuenta</th><th>Nombre</th><th class="n">Debe</th><th class="n">Haber</th></tr>${L.map(l=>`<tr><td>${esc(l[0]||"—")}</td><td>${esc(l[1]||"")}</td><td class="n">${l[2]?eur(l[2]):""}</td><td class="n">${l[3]?eur(l[3]):""}</td></tr>`).join("")}</table></div>`:"";}
 function saveInvoice(){const kind=$("#f-kind").value,id=+$("#f-id").value,lines=readLines();let cid=+$("#f-contact").value;
   if(!lines.length)return fail("Añade al menos una línea con importe.");
-  if(!cid){const name=$("#f-newname").value.trim();if(!name)return fail("Elige un contacto o escribe el nombre del nuevo.");
-    const c={id:S.seq++,type:kind==="emitida"?"cliente":"proveedor",name,nif:$("#f-newnif").value.trim(),address:"",email:""};S.contacts.push(c);cid=c.id;}
-  let inv=S.invoices.find(i=>i.id===id);if(!inv){inv={id:S.seq++,kind,paid:null,bank:null};S.invoices.push(inv);}
-  Object.assign(inv,{number:$("#f-number").value.trim(),date:$("#f-date").value,due:$("#f-due").value,contactId:cid,account:$("#f-account").value,irpf:+$("#f-irpf").value||0,center:$("#f-center").value.trim(),lines});
-  postInvoice(S,inv);done();}
+  const acc=$("#f-account").value;if(!acc||!S.accounts.some(a=>a.code===acc))return fail("Elige la cuenta de "+(kind==="emitida"?"ingreso":"gasto")+" en la lista.");
+  if(!cid){const name=$("#f-newname").value.trim(),nif=$("#f-newnif").value.trim();if(!name)return fail("Elige un "+(kind==="emitida"?"cliente":"proveedor")+" o escribe el nombre y el NIF del nuevo.");
+    const e=nifErr(nif,false);if(e)return fail(e.replace("marca «NIF de otro país»","dalo de alta en Clientes y proveedores marcando «NIF de otro país»"));
+    const c={id:S.seq++,type:kind==="emitida"?"cliente":"proveedor",name,nif:nifNorm(nif),address:"",cp:"",city:"",province:"",country:"España",phone:"",email:""};S.contacts.push(c);cid=c.id;}
+  let inv=S.invoices.find(i=>i.id===id);const oldPay=inv&&inv.paid?S.entries.find(e=>e.src==="pay:"+inv.id):null,oldTot=inv?invTotals(inv).total:0;
+  if(!inv){inv={id:S.seq++,kind,paid:null,bank:null};S.invoices.push(inv);}
+  Object.assign(inv,{number:$("#f-number").value.trim(),date:$("#f-date").value,due:$("#f-due").value,contactId:cid,account:acc,irpf:+$("#f-irpf").value||0,center:$("#f-center").value.trim(),lines});
+  postInvoice(S,inv);if(inv.paid){payInvoice(S,inv,inv.paid,inv.bank);if(oldPay&&invTotals(inv).total===oldTot){const np=S.entries[S.entries.length-1];np.lines.forEach((l,k)=>{if(oldPay.lines[k])l.ok=oldPay.lines[k].ok;});}}
+  if(ui.ed&&$("#ed")){ui.flash=(id?"Factura "+inv.number+" corregida.":"Factura "+inv.number+" guardada y contabilizada.");ui.ed=null;}done();}
+
 function invView(id){const i=S.invoices.find(x=>x.id===id);if(!i)return;const t=invTotals(i),c=contact(i.contactId),me=S.company,em=i.kind==="emitida";
   const from=em?me:c,to=em?c:me;
   modal(`<div class="dlg"><div class="inv"><div class="top"><div><h3>Factura ${esc(i.number)}</h3><div>Fecha: ${fd(i.date)}</div>${i.due?`<div>Vencimiento: ${fd(i.due)}</div>`:""}</div>
-  <div><b>${esc(from.name)}</b><br>${esc(from.nif||"")}<br>${esc(from.address||"")}</div></div>
-  <p><b>Facturar a:</b> ${esc(to.name)} ${to.nif?"· "+esc(to.nif):""}<br>${esc(to.address||"")}</p>
+  <div><b>${esc(from.name)}</b><br>${esc(from.nif||"")}<br>${esc(from.address||"")}${from.cp||from.city?`<br>${esc([from.cp,from.city,from.province].filter(Boolean).join(" "))}`:""}</div></div>
+  <p><b>Facturar a:</b> ${esc(to.name)} ${to.nif?"· "+esc(to.nif):""}<br>${esc(to.address||"")}${to.cp||to.city?`<br>${esc([to.cp,to.city,to.province].filter(Boolean).join(" "))}`:""}</p>
   <table><tr><th>Concepto</th><th class="n">Cant.</th><th class="n">Precio</th><th class="n">IVA</th><th class="n">Importe</th></tr>
   ${i.lines.map(l=>`<tr><td>${esc(l.desc)}</td><td class="n">${l.qty}</td><td class="n">${eur(l.price)}</td><td class="n">${l.vat} %</td><td class="n">${eur(r2(l.qty*l.price))}</td></tr>`).join("")}
   <tr><td colspan="4" class="n">Base imponible</td><td class="n">${eur(t.base)}</td></tr>
@@ -464,8 +498,41 @@ function invView(id){const i=S.invoices.find(x=>x.id===id);if(!i)return;const t=
   <div class="row" style="justify-content:flex-end">${EMBEDDED?`<span class="small muted">La impresión a PDF funciona al abrir el archivo en tu PC.</span>`:`<button data-act="print">Imprimir / PDF</button>`}<button data-act="close">Cerrar</button></div></div>`);}
 function payForm(id){const i=S.invoices.find(x=>x.id===id);if(!S.accounts.some(a=>a.code.slice(0,2)==="57"))return;
   modal(`<form class="dlg sm" data-form="pay"><h2>${i.kind==="emitida"?"Cobrar":"Pagar"} factura ${esc(i.number)}</h2><input type="hidden" id="p-id" value="${id}"><p>Importe: <b>${eur(invTotals(i).total)}</b></p>
-  <div class="form"><label>Fecha<input id="p-date" type="date" required value="${TODAY}"></label><label>Cuenta<select id="p-bank">${bankOpts()}</select></label></div>
+  <div class="form"><label>Fecha<input id="p-date" type="date" required value="${i.paid||TODAY}"></label><label>Cuenta<select id="p-bank">${bankOpts(i.bank)}</select></label></div>
   <div class="row" style="justify-content:flex-end"><button type="button" data-act="close">Cancelar</button><button class="pri">Confirmar</button></div></form>`);}
+
+/* Buscador de cuentas y contactos */
+const norm=x=>String(x||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
+function pk(src,id,cls,val,label,ph,extra){return`<div class="pk" data-src="${src}"><input class="pk-in" ${extra||""} autocomplete="off" value="${esc(label||"")}" placeholder="${esc(ph||"Escribe código o nombre")}" aria-label="${esc(ph||"Buscar cuenta")}"><input type="hidden" ${id?`id="${id}"`:""} class="pk-val ${cls||""}" value="${esc(val==null?"":val)}"><div class="pk-list" hidden></div></div>`;}
+function accLabel(c){return c?c+" · "+accName(c):"";}
+function pkAccounts(src){const pre=src.includes(":")?src.split(":")[1].split(","):null;return S.accounts.filter(a=>!pre||pre.some(p=>a.code.startsWith(p)));}
+function pkSearch(src,q){const qn=norm(q).trim(),out=[];
+  if(src==="cliente"||src==="proveedor"){for(const c of S.contacts){if(c.type!==src)continue;const n=norm(c.name),nf=norm(c.nif),ac=c.acc||"";let sc=-1;
+      if(!qn)sc=1;else if(n.startsWith(qn))sc=0;else if(n.split(/\s+/).some(w=>w.startsWith(qn))||nf.startsWith(qn)||ac.startsWith(qn))sc=1;else if(n.includes(qn))sc=2;
+      if(sc>=0)out.push({v:String(c.id),l:c.name,s:[c.nif,ac].filter(Boolean).join(" · "),sc});}}
+  else for(const a of pkAccounts(src)){const n=norm(a.name);let sc=-1;if(!qn)sc=1;else if(a.code.startsWith(qn))sc=0;else if(n.startsWith(qn))sc=0;else if(n.split(/\s+/).some(w=>w.startsWith(qn)))sc=1;else if(n.includes(qn))sc=2;
+      if(sc>=0)out.push({v:a.code,l:a.code+" · "+a.name,s:"",sc});}
+  return out.sort((a,b)=>a.sc-b.sc||(a.l<b.l?-1:1));}
+let pkCur=null;
+function pkOpen(inp){const box=inp.closest(".pk"),src=box.dataset.src,list=$(".pk-list",box),q=inp.value,res=pkSearch(src,q),max=60;pkCur=inp;
+  let h=res.slice(0,max).map((r,i)=>`<div class="pk-it${i===0?" on":""}" data-v="${esc(r.v)}" data-l="${esc(r.l)}"><span>${esc(r.l)}</span>${r.s?`<small>${esc(r.s)}</small>`:""}</div>`).join("");
+  if(res.length>max)h+=`<div class="pk-more">Hay ${res.length-max} más. Sigue escribiendo para afinar.</div>`;
+  if((src==="cliente"||src==="proveedor")&&q.trim()&&$("#f-newname",box.closest("form")||document))h+=`<div class="pk-it${res.length?"":" on"}" data-new="1"><span>＋ Crear ${src} nuevo: «${esc(q.trim())}»</span></div>`;
+  if(!h)h=`<div class="pk-more">Sin resultados.</div>`;
+  list.innerHTML=h;const r=inp.getBoundingClientRect();const W=Math.min(Math.max(r.width,320),innerWidth-16),L0=Math.max(8,Math.min(r.left,innerWidth-W-8)),up=r.bottom+290>innerHeight&&r.top>300;Object.assign(list.style,{left:L0+"px",top:up?"auto":(r.bottom+2)+"px",bottom:up?(innerHeight-r.top+2)+"px":"auto",width:W+"px"});list.hidden=false;}
+function pkClose(inp){const l=inp&&$(".pk-list",inp.closest(".pk"));if(l)l.hidden=true;if(pkCur===inp)pkCur=null;}
+function pkChoose(inp,it){const box=inp.closest(".pk"),hid=$(".pk-val",box),src=box.dataset.src,ct=src==="cliente"||src==="proveedor";
+  if(it.dataset.new){hid.value="0";const f=box.closest("form"),nn=f&&$("#f-newname",f);if(nn){nn.value=inp.value.trim();const nf=$("#f-newnif",f);if(nf)setTimeout(()=>nf.focus(),0);}}
+  else if(box.dataset.free){inp.value=it.dataset.v;pkClose(inp);inp.dispatchEvent(new Event("change",{bubbles:true}));return;}
+  else{hid.value=it.dataset.v;inp.value=ct?it.dataset.l:it.dataset.l;}
+  pkClose(inp);hid.dispatchEvent(new Event("input",{bubbles:true}));}
+function pkBlur(inp){const box=inp.closest(".pk");if(!box||box.dataset.free)return;const hid=$(".pk-val",box),src=box.dataset.src,ct=src==="cliente"||src==="proveedor",q=inp.value.trim();
+  if(!q){hid.value=ct?"0":"";return;}if(hid.value&&hid.value!=="0")return;
+  const res=pkSearch(src,q),ex=res.find(r=>r.v===q||norm(r.l)===norm(q)||(ct&&norm(r.l)===norm(q)));
+  if(ex||(res.length===1&&res[0].sc===0)){const r=ex||res[0];hid.value=r.v;inp.value=r.l;hid.dispatchEvent(new Event("input",{bubbles:true}));}
+  else if(ct){const f=box.closest("form"),nn=f&&$("#f-newname",f);if(nn&&!nn.value)nn.value=q;}}
+function nifErr(nif,foreign){const r=nifCheck(nif);if(r==="empty")return"El NIF es obligatorio.";if(r==="bad"&&!foreign)return"El NIF "+nifNorm(nif)+" no es válido. Revísalo; si es de otro país, marca «NIF de otro país».";return"";}
+function nifPill(c){const r=nifCheck(c.nif);return r==="empty"?`<span class="pill bad">Falta NIF</span>`:r==="bad"&&!c.foreign?`<span class="pill warn">NIF no válido</span>`:"";}
 
 /* Documentos de venta y compra */
 const DN={oferta:"Ofertas",pedido:"Pedidos",albaran:"Albaranes"},D1={oferta:"oferta",pedido:"pedido",albaran:"albarán"};
@@ -480,7 +547,7 @@ function vDocs(side){const ty=ui.doc[side],fl=FLOW[side],k=fl.indexOf(ty),nx=k<f
   <p class="small muted">${side==="venta"?"Circuito: oferta → pedido → albarán → factura.":"Circuito: pedido → albarán → factura recibida."} El albarán mueve el stock de los artículos; la factura crea el asiento contable.</p></div>`;}
 function docForm(side){const ty=ui.doc[side],type=side==="venta"?"cliente":"proveedor";
   modal(`<form class="dlg" data-form="doc" data-side="${side}"><h2>Nuevo ${D1[ty]} de ${side}</h2><div class="form"><label>Número<input id="f-number" required value="${docNumber(S,side,ty)}"></label><label>Fecha<input id="f-date" type="date" required value="${TODAY}"></label>
-  <label>${side==="venta"?"Cliente":"Proveedor"}<select id="f-contact"><option value="0">Nuevo…</option>${S.contacts.filter(c=>c.type===type).map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join("")}</select></label><label>Nombre (si es nuevo)<input id="f-newname"></label></div>
+  <label>${side==="venta"?"Cliente":"Proveedor"}${pk(type,"f-contact","",0,"","Escribe el nombre, el NIF o la cuenta")}</label><label>Nombre (si es nuevo)<input id="f-newname"></label><label>NIF (si es nuevo)<input id="f-newnif"></label></div>
   <div class="tw"><table><thead><tr><th>Concepto</th><th>Cant.</th><th>Precio</th><th>IVA %</th><th></th></tr></thead><tbody id="f-lines">${lineRow({desc:"",qty:1,price:0,vat:21})}</tbody></table></div>
   <div class="row" style="justify-content:space-between"><div class="row"><button type="button" data-act="line-add">Añadir línea</button>${itemPick(side==="venta")}</div><div id="f-tot" class="small"></div></div>
   <div class="err" id="f-err"></div><div class="row" style="justify-content:flex-end"><button type="button" data-act="close">Cancelar</button><button class="pri">Guardar</button></div></form>`);updTot();}
@@ -555,38 +622,71 @@ function vPresupuesto(){const y=S.year,b=S.budgets[y]||{},[f,t]=yr(),m=balances(
   <p class="small muted">Escribe el importe anual previsto en cada cuenta; se guarda al salir de la casilla.</p></div>`;}
 
 /* Contactos */
-function vContacts(){const rows=S.contacts.map(c=>{const n=S.invoices.filter(i=>i.contactId===c.id),open=n.filter(i=>!i.paid).reduce((a,i)=>r2(a+invTotals(i).total),0);
-  return`<tr><td><b>${esc(c.name)}</b></td><td>${c.acc?`<button class="link" data-act="mayor" data-acc="${c.acc}">${c.acc}</button>`:""}</td><td><span class="pill ${c.type==="cliente"?"neu":"warn"}">${c.type==="cliente"?"Cliente":"Proveedor"}</span></td><td>${esc(c.nif)}</td><td>${esc(c.email||"")}</td><td class="n">${n.length}</td><td class="n">${eur(open)}</td><td class="n"><button class="link" data-act="con-edit" data-id="${c.id}">Editar</button><button class="link" data-act="con-del" data-id="${c.id}">Borrar</button></td></tr>`;}).join("");
+function vContacts(){const q=norm(ui.cq||"").trim(),ty=ui.ct||"";
+  const list=S.contacts.filter(c=>(!ty||c.type===ty)&&(!q||norm(c.name).startsWith(q)||norm(c.name).split(/\s+/).some(w=>w.startsWith(q))||norm(c.nif).startsWith(q)||(c.acc||"").startsWith(q)||norm(c.name).includes(q))).sort((a,b)=>(a.acc||"")<(b.acc||"")?-1:1);
+  const rows=list.slice(0,300).map(c=>{const n=S.invoices.filter(i=>i.contactId===c.id),open=n.filter(i=>!i.paid).reduce((a,i)=>r2(a+invTotals(i).total),0);
+  return`<tr><td><b>${esc(c.name)}</b></td><td>${c.acc?`<button class="link" data-act="mayor" data-acc="${c.acc}">${c.acc}</button>`:""}</td><td><span class="pill ${c.type==="cliente"?"neu":"warn"}">${c.type==="cliente"?"Cliente":"Proveedor"}</span></td><td>${esc(c.nif)} ${nifPill(c)}</td><td>${esc([c.city,c.province].filter(Boolean).join(", "))}</td><td>${esc(c.phone||"")}</td><td class="n">${n.length}</td><td class="n">${eur(open)}</td><td class="n"><button class="link" data-act="con-edit" data-id="${c.id}">Ficha</button><button class="link" data-act="con-del" data-id="${c.id}">Borrar</button></td></tr>`;}).join("");
+  const miss=S.contacts.filter(c=>nifCheck(c.nif)==="empty"||(nifCheck(c.nif)==="bad"&&!c.foreign)).length;
   return`<div class="head"><h1>Clientes y proveedores</h1><button class="pri" data-act="con-edit" data-id="0">Nuevo contacto</button></div>
-  <div class="card"><div class="tw"><table><tr><th>Nombre</th><th>Cuenta</th><th>Tipo</th><th>NIF</th><th>Correo</th><th class="n">Facturas</th><th class="n">Saldo pendiente</th><th></th></tr>${rows||`<tr><td colspan="8" class="muted">Aún no hay contactos.</td></tr>`}</table></div></div>`;}
-function conForm(id){const c=S.contacts.find(x=>x.id===id)||{id:0,type:"cliente",name:"",nif:"",address:"",email:""};
-  modal(`<form class="dlg sm" data-form="contact"><h2>${id?"Editar":"Nuevo"} contacto</h2><input type="hidden" id="c-id" value="${c.id}">
+  <div class="row"><input id="con-q" data-live="cq" type="search" placeholder="Buscar por nombre, NIF o cuenta" value="${esc(ui.cq||"")}" style="max-width:340px" aria-label="Buscar contacto"><select id="con-t" style="width:auto" aria-label="Tipo"><option value="">Todos</option><option value="cliente" ${ty==="cliente"?"selected":""}>Clientes</option><option value="proveedor" ${ty==="proveedor"?"selected":""}>Proveedores</option></select><span class="small muted">${list.length} de ${S.contacts.length}</span></div>
+  ${miss?`<div class="banner"><span>${miss} contactos sin NIF o con un NIF no válido. Complétalos: el NIF es necesario para el modelo 347.</span></div>`:""}
+  <div class="card"><div class="tw"><table><tr><th>Nombre</th><th>Cuenta</th><th>Tipo</th><th>NIF</th><th>Población</th><th>Teléfono</th><th class="n">Facturas</th><th class="n">Saldo pendiente</th><th></th></tr>${rows||`<tr><td colspan="9" class="muted">${S.contacts.length?"Ningún contacto coincide con la búsqueda.":"Aún no hay contactos."}</td></tr>`}</table></div>${list.length>300?`<p class="small muted">Se muestran los 300 primeros. Afina la búsqueda para ver el resto.</p>`:""}</div>`;}
+function conForm(id){const c=S.contacts.find(x=>x.id===id)||{id:0,type:ui.ct||"cliente",name:"",nif:"",address:"",cp:"",city:"",province:"",country:"España",phone:"",email:""},F=(k,l,extra)=>`<label>${l}<input id="c-${k}" value="${esc(c[k]||"")}" ${extra||""}></label>`;
+  modal(`<form class="dlg" data-form="contact"><h2>${id?"Ficha de "+esc(c.name):"Nuevo contacto"}</h2><input type="hidden" id="c-id" value="${c.id}">
   <div class="form"><label>Tipo<select id="c-type"><option value="cliente" ${c.type==="cliente"?"selected":""}>Cliente</option><option value="proveedor" ${c.type==="proveedor"?"selected":""}>Proveedor</option></select></label>
-  <label>Nombre o razón social<input id="c-name" required value="${esc(c.name)}"></label><label>NIF<input id="c-nif" value="${esc(c.nif)}"></label><label>Correo<input id="c-email" value="${esc(c.email||"")}"></label><label>Dirección<input id="c-address" value="${esc(c.address||"")}"></label></div>
-  <div class="row" style="justify-content:flex-end"><button type="button" data-act="close">Cancelar</button><button class="pri">Guardar</button></div></form>`);}
+  ${F("name","Nombre o razón social *","required")}${F("nif","NIF / CIF *","required")}
+  <label style="flex-direction:row;align-items:center;gap:8px;align-self:end;font-weight:500;color:var(--ink)"><input id="c-foreign" type="checkbox" style="width:auto" ${c.foreign?"checked":""}>NIF de otro país</label></div>
+  <div class="form">${F("address","Dirección")}${F("cp","Código postal")}${F("city","Población")}${F("province","Provincia")}${F("country","País")}${F("phone","Teléfono")}${F("email","Correo")}</div>
+  ${c.acc?`<p class="small muted" style="margin:0">Cuenta contable: <b>${c.acc}</b></p>`:""}
+  <div class="err" id="f-err"></div><div class="row" style="justify-content:flex-end"><button type="button" data-act="close">Cancelar</button><button class="pri">Guardar</button></div></form>`);}
 
-/* Diario */
 function vDiario(){const[f,t]=rng(),num={};S.entries.filter(inYear).sort(byDate).forEach((e,k)=>{num[e.id]=k+1;});const es=S.entries.filter(e=>e.date>=f&&e.date<=t).sort(byDate);let td=0,tc=0;
   const rows=es.map((e,k)=>{const TAG={inv:["neu","Factura"],pay:["good","Cobro/pago"],iva:["warn","Liquidación IVA"],reg:["warn","Regularización"],cie:["warn","Cierre"],ape:["warn","Apertura"],nom:["warn","Nómina"],amo:["warn","Amortización"]}[e.src.slice(0,3)];
-    const tag=(TAG?`<span class="pill ${TAG[0]}">${TAG[1]}</span> `:"")+(!e.src?`<button class="link" data-act="ent-edit" data-id="${e.id}">Editar</button><button class="link" data-act="ent-dup" data-id="${e.id}">Duplicar</button>`:"")+(/^(inv|pay|reg|cie|ape)/.test(e.src)?"":`<button class="link" data-act="ent-del" data-id="${e.id}">Borrar</button>`);
+    const tag=(TAG?`<span class="pill ${TAG[0]}">${TAG[1]}</span> `:"")+(!e.src?`<button class="link" data-act="ent-dup" data-id="${e.id}">Duplicar</button>`:"")+(!e.src||/^(inv|pay)/.test(e.src)?`<button class="link" data-act="ed-open" data-id="${e.id}">Editar</button>`:"")+(/^(inv|pay|reg|cie|ape)/.test(e.src)?"":`<button class="link" data-act="ent-del" data-id="${e.id}">Borrar</button>`);
     return`<tr class="eh"><td>${num[e.id]||""}</td><td>${fd(e.date)}</td><td colspan="2">${esc(e.concept)}</td><td class="n" colspan="2">${tag}</td></tr>`+e.lines.map(l=>{td=r2(td+l.d);tc=r2(tc+l.c);
       return`<tr><td></td><td></td><td>${l.acc}</td><td>${esc(accName(l.acc))}${l.contact?` <span class="muted">· ${esc(contact(l.contact).name)}</span>`:""}</td><td class="n">${l.d?eur(l.d):""}</td><td class="n">${l.c?eur(l.c):""}</td></tr>`;}).join("");}).join("");
-  return`<div class="head"><h1>Libro diario ${S.year}</h1><div class="row"><button data-act="tbl-csv">Exportar a Excel (.csv)</button>${S.entries.some(e=>e.src==="reg:"+S.year||e.src==="cie:"+S.year)?`<span class="pill good">Ejercicio cerrado</span><button data-act="year-open">Deshacer cierre</button>`:`<button data-act="year-close">Cerrar ejercicio ${S.year}</button>`}<button class="pri" data-act="ent-new">Nuevo asiento manual</button></div></div>
+  return`<div class="head"><h1>Libro diario ${S.year}</h1><div class="row"><button data-act="tbl-csv">Exportar a Excel (.csv)</button>${S.entries.some(e=>e.src==="reg:"+S.year||e.src==="cie:"+S.year)?`<span class="pill good">Ejercicio cerrado</span><button data-act="year-open">Deshacer cierre</button>`:`<button data-act="year-close">Cerrar ejercicio ${S.year}</button>`}<button class="pri" data-act="ent-new">Nuevo asiento</button></div></div>
   ${rangeBar()}<div class="card"><div class="tw"><table><tr><th>Nº</th><th>Fecha</th><th>Cuenta</th><th>Concepto</th><th class="n">Debe</th><th class="n">Haber</th></tr>${rows||`<tr><td colspan="6" class="muted">Sin asientos.</td></tr>`}
   <tr class="tot"><td colspan="4">Totales</td><td class="n">${eur(td)}</td><td class="n">${eur(tc)}</td></tr></table></div></div>`;}
-function entRow(l){l=l||{};return`<tr><td><select class="e-acc" aria-label="Cuenta">${accOpts(()=>true,l.acc)}</select></td><td style="width:130px"><input class="e-d" type="number" step="any" min="0" value="${l.d||""}" aria-label="Debe"></td><td style="width:130px"><input class="e-c" type="number" step="any" min="0" value="${l.c||""}" aria-label="Haber"></td><td style="width:40px"><button type="button" class="link" data-act="eline-del" aria-label="Quitar línea">✕</button></td></tr>`;}
-function entForm(pre){pre=pre||{concept:"",lines:[{},{}]};modal(`<form class="dlg" data-form="entry"><h2>${pre.id?"Editar asiento":"Nuevo asiento manual"}</h2><input type="hidden" id="e-id" value="${pre.id||0}">
-  <div class="form"><label>Plantilla<select id="e-tpl"><option value="">Usar plantilla…</option>${S.templates.map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join("")}</select></label><label>Fecha<input id="e-date" type="date" required value="${pre.date||TODAY}"></label><label>Concepto<input id="e-concept" required value="${esc(pre.concept)}"></label></div>
+function entRow(l){l=l||{};return`<tr><td style="min-width:200px">${pk("acc",null,"e-acc",l.acc||"",accLabel(l.acc),"Código o nombre de la cuenta")}</td><td style="width:130px"><input class="e-d" type="number" step="any" min="0" value="${l.d||""}" aria-label="Debe"></td><td style="width:130px"><input class="e-c" type="number" step="any" min="0" value="${l.c||""}" aria-label="Haber"></td><td style="width:40px"><button type="button" class="link" data-act="eline-del" aria-label="Quitar línea">✕</button></td></tr>`;}
+function entFormHtml(pre){pre=pre||{concept:"",lines:[{},{}]};return`<form data-form="entry" style="display:flex;flex-direction:column;gap:14px"><input type="hidden" id="e-id" value="${pre.id||0}">
+  <div class="form"><label>Plantilla<select id="e-tpl"><option value="">Usar plantilla…</option>${S.templates.map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join("")}</select></label><label>Fecha<input id="e-date" type="date" required value="${pre.date||TODAY}"></label><label style="grid-column:span 2">Concepto<input id="e-concept" required value="${esc(pre.concept)}"></label></div>
   <div class="tw"><table><thead><tr><th>Cuenta</th><th>Debe</th><th>Haber</th><th></th></tr></thead><tbody id="e-lines">${pre.lines.map(entRow).join("")}</tbody></table></div>
-  <div class="row" style="justify-content:space-between"><button type="button" data-act="ent-line">Añadir línea</button><div id="e-tot" class="small"></div></div>
+  <div class="row" style="justify-content:space-between"><button type="button" data-act="ent-line">Añadir línea</button><div id="e-tot" class="small"></div></div><div id="e-warn"></div>
   <details><summary class="small muted">Crear una cuenta nueva sin salir del asiento</summary><div class="row" style="margin-top:8px"><input id="e-ncode" placeholder="Código, ${S.digits} dígitos" style="width:150px" aria-label="Código de la cuenta nueva"><input id="e-nname" placeholder="Nombre de la cuenta" style="flex:1;min-width:180px;width:auto" aria-label="Nombre de la cuenta nueva"><button type="button" data-act="acc-quick">Crear cuenta</button></div></details>
   <label style="flex-direction:row;align-items:center;gap:8px;font-weight:500;color:var(--ink)"><input id="e-save" type="checkbox" style="width:auto">Guardar también como plantilla, con el concepto como nombre</label>
-  <div class="err" id="f-err"></div><div class="row" style="justify-content:flex-end"><button type="button" data-act="tpl-del">Borrar la plantilla elegida</button><button type="button" data-act="close">Cancelar</button><button class="pri">Guardar asiento</button></div></form>`);updEnt();}
+  <div class="err" id="f-err"></div><div class="row" style="justify-content:flex-end"><button type="button" data-act="tpl-del">Borrar la plantilla elegida</button><button type="button" data-act="ed-cancel">${pre.id?"Cancelar la edición":"Limpiar"}</button><button class="pri">${pre.id?"Guardar cambios":"Guardar asiento"}</button></div></form>`;}
+let edSeq=0;
+function edOpen(ed){ed.key="k"+(++edSeq);ui.ed=ed;ui.flash="";if(view()!=="asientos")location.hash="asientos";else{render();}setTimeout(()=>{const e=$("#ed");if(e)e.scrollIntoView({block:"start"});},0);}
+function entForm(pre){edOpen({mode:"normal",pre:pre||null});}
+function edHtml(){const e=ui.ed||(ui.ed={mode:"normal",pre:null,key:"k"+(++edSeq)}),editing=e.pre&&e.pre.id||e.inv&&e.inv.id,
+    tab=(m,l)=>`<button type="button" data-act="ed-mode" data-mode="${m}" class="${e.mode===m?"on":""}" ${editing&&e.mode!==m?"disabled":""}>${l}</button>`;
+  let title="Nuevo asiento";if(editing)title=e.mode==="normal"?"Editando el asiento nº "+(asNum()[e.pre.id]||"")+" del "+fd(e.pre.date):"Editando la factura "+esc(e.inv.number)+" ("+(e.mode==="emitida"?"emitida":"recibida")+")";
+  return`<div id="ed" class="card" data-key="${e.key}"><div class="head"><h2>${title}</h2><div class="tabs">${tab("normal","Asiento")}${tab("recibida","Factura recibida")}${tab("emitida","Factura emitida")}</div></div>
+  ${ui.flash?`<div class="flash">${esc(ui.flash)}</div>`:""}
+  <p class="small muted" style="margin:0">${e.mode==="normal"?"Asiento libre: elige las cuentas escribiendo su código o su nombre, y los importes al debe y al haber. Al añadir una línea se propone el importe que falta para cuadrar.":"Factura con IVA: genera su asiento y queda anotada en los libros de IVA y en los modelos 303, 390 y 347. Para comprar una mesa, por ejemplo, elige el proveedor, la cuenta 216 de mobiliario y la base con su IVA."}</p>
+  ${e.mode==="normal"?entFormHtml(e.pre):invFormHtml(e.mode,e.inv||newInv(e.mode),true)}</div>`;}
+function edInit(){const ed=$("#ed");if(!ed||ed.dataset.init)return;ed.dataset.init="1";if($("[data-form=entry]",ed))updEnt();else updTot();}
+function asNum(){const num={};S.entries.filter(inYear).sort(byDate).forEach((e,k)=>{num[e.id]=k+1;});return num;}
+const ASRC={inv:"Factura",pay:"Cobro o pago",iva:"Liquidación de IVA",reg:"Regularización",cie:"Cierre",ape:"Apertura",nom:"Nómina",amo:"Amortización"};
+function asMatch(e,q,num){if(!q)return true;const n=parseNum(q);
+  if(/^n?º?\s*\d+$/.test(q)&&num[e.id]===+q.replace(/\D/g,""))return true;if(norm(e.concept).includes(q))return true;
+  for(const l of e.lines){if(/^\d+$/.test(q)&&l.acc.startsWith(q))return true;if(norm(accName(l.acc)).includes(q))return true;if(l.contact&&norm(contact(l.contact).name).includes(q))return true;if(!isNaN(n)&&(l.d===n||l.c===n))return true;}
+  if(e.src.startsWith("inv:")){const i=S.invoices.find(x=>"inv:"+x.id===e.src);if(i&&(norm(i.number).includes(q)||norm(contact(i.contactId).name).includes(q)||norm(contact(i.contactId).nif).startsWith(q)))return true;}
+  return false;}
+function asList(){const[f,t]=rng(),q=norm(ui.asq||"").trim(),num=asNum(),all=S.entries.filter(e=>e.date>=f&&e.date<=t&&asMatch(e,q,num)).sort(byDate).reverse(),es=all.slice(0,100);
+  return`<div class="card"><div class="head"><h2>Asientos del periodo</h2><span class="small muted">${all.length} asientos${all.length>100?" · se muestran los 100 más recientes":""}</span></div><div class="tw"><table><tr><th>Nº</th><th>Fecha</th><th>Cuenta</th><th>Concepto</th><th class="n">Debe</th><th class="n">Haber</th></tr>
+  ${es.map(e=>{const k=e.src.slice(0,3),auto=ASRC[k],ed=!e.src||k==="inv"||k==="pay";
+    const acts=(ed?`<button class="link" data-act="ed-open" data-id="${e.id}">Editar</button>`:`<span class="small muted" title="Se modifica desde su origen">Automático</span>`)+(!e.src?`<button class="link" data-act="ent-dup" data-id="${e.id}">Duplicar</button>`:"")+(/^(inv|pay|reg|cie|ape)/.test(e.src)?"":`<button class="link" data-act="ent-del" data-id="${e.id}">Borrar</button>`);
+    return`<tr class="eh"><td>${num[e.id]||""}</td><td>${fd(e.date)}</td><td colspan="2">${esc(e.concept)} ${auto?`<span class="pill neu">${auto}</span>`:""}</td><td class="n" colspan="2">${acts}</td></tr>`+e.lines.map(l=>`<tr><td></td><td></td><td>${l.acc}</td><td>${esc(accName(l.acc))}${l.contact?` <span class="muted">· ${esc(contact(l.contact).name)}</span>`:""}</td><td class="n">${l.d?eur(l.d):""}</td><td class="n">${l.c?eur(l.c):""}</td></tr>`).join("");}).join("")||`<tr><td colspan="6" class="muted">${q?"Ningún asiento coincide con la búsqueda.":"No hay asientos en estas fechas."}</td></tr>`}</table></div></div>`;}
+function vAsientos(){return`<div class="head"><h1>Asientos</h1><button data-act="tbl-csv">Exportar a Excel (.csv)</button></div>${edHtml()}
+  <div class="row"><input id="as-q" type="search" placeholder="Buscar por concepto, cuenta, proveedor, cliente, nº de factura o importe" value="${esc(ui.asq||"")}" style="flex:1;min-width:240px" aria-label="Buscar asiento"></div>${rangeBar()}<div id="as-list">${asList()}</div>`;}
 function readEnt(){return $$("#e-lines tr").map(tr=>({acc:$(".e-acc",tr).value,d:+$(".e-d",tr).value||0,c:+$(".e-c",tr).value||0})).filter(l=>l.d||l.c);}
-function updEnt(){if(!$("#e-tot"))return;const ls=readEnt(),d=r2(ls.reduce((a,l)=>a+l.d,0)),c=r2(ls.reduce((a,l)=>a+l.c,0));
+function updEnt(){if(!$("#e-tot"))return;const w=$("#e-warn");if(w)w.innerHTML=$$("#e-lines .e-acc").some(h=>/^47[27]/.test(h.value))?`<div class="banner" style="margin:0"><span>Este asiento lleva cuentas de IVA, pero un asiento libre no se anota en los libros de IVA ni en los modelos 303, 390 y 347. Si es una factura, usa la pestaña «Factura recibida» o «Factura emitida».</span></div>`:"";const ls=readEnt(),d=r2(ls.reduce((a,l)=>a+l.d,0)),c=r2(ls.reduce((a,l)=>a+l.c,0));
   $("#e-tot").innerHTML=`Debe <b>${eur(d)}</b> · Haber <b>${eur(c)}</b> · ${d===c?`<span class="pill good">Cuadrado</span>`:`<span class="pill bad">Descuadre ${eur(r2(d-c))}</span>`}`;}
 
 /* Informes */
+function bslSel(){return`<div class="row" style="margin-bottom:10px"><label style="min-width:260px">Detalle<select id="bsl">${[[0,"Solo epígrafes"],[3,"Epígrafes y cuentas (3 dígitos)"],[9,"Epígrafes y subcuentas"]].map(o=>`<option value="${o[0]}" ${(ui.bsl||0)===o[0]?"selected":""}>${o[1]}</option>`).join("")}</select></label></div>`;}
 function vInformes(){const[f,t]=rng();const tabs=[["sumas","Sumas y saldos"],["mayor","Libro mayor"],["situacion","Balance de situación"],["pyg","Pérdidas y ganancias"],["iva","Libros de IVA"],["analitica","Analítica"],["plan","Plan de cuentas"]];
   let body="";
   if(ui.rep==="sumas"){const m0=balances(S,f,t,["reg:","cie:"]),m={};for(const k in m0){const g=ui.lvl?k.slice(0,ui.lvl):k,o=m[g]||(m[g]={d:0,c:0});o.d=r2(o.d+m0[k].d);o.c=r2(o.c+m0[k].c);}let a=0,b=0,c=0,d=0;
@@ -597,21 +697,22 @@ function vInformes(){const[f,t]=rng();const tabs=[["sumas","Sumas y saldos"],["m
     for(const e of S.entries.slice().sort(byDate))for(const l of e.lines){if(!inF(l.acc))continue;
       if(e.date<f){if(!((l.acc[0]==="6"||l.acc[0]==="7")&&e.date<y0))ini[l.acc]=r2((ini[l.acc]||0)+l.d-l.c);}else if(e.date<=t)(mov[l.acc]=mov[l.acc]||[]).push([e,l]);}
     const codes=[...new Set(Object.keys(mov).concat(Object.keys(ini).filter(k=>ini[k])))].sort();
-    body=`<div class="row" style="margin-bottom:10px"><label style="min-width:300px">Cuenta, grupo o rango<input id="mayor-flt" value="${esc(ui.mayor)}" placeholder="430001, 430 o 400-410" list="acc-list"></label><datalist id="acc-list">${S.accounts.map(a=>`<option value="${a.code}">${esc(a.name)}</option>`).join("")}</datalist><span class="small muted" style="align-self:flex-end">Escribe 430 para todos los clientes, 400 para todos los proveedores, 400-410 para un rango, o déjalo vacío para todas las cuentas.</span></div>
+    body=`<div class="row" style="margin-bottom:10px"><label style="min-width:300px">Cuenta, grupo o rango<div class="pk" data-src="acc" data-free="1"><input class="pk-in" id="mayor-flt" autocomplete="off" value="${esc(ui.mayor)}" placeholder="430001, 430, 400-410 o un nombre"><input type="hidden" class="pk-val"><div class="pk-list" hidden></div></div></label><span class="small muted" style="align-self:flex-end">Escribe un código o empieza a escribir un nombre y elige en la lista. 430 saca todos los clientes, 400 todos los proveedores y 400-410 un rango; vacío, todas las cuentas.</span></div>
     <table><tr><th>Fecha</th><th>Concepto</th><th class="n">Debe</th><th class="n">Haber</th><th class="n">Saldo</th></tr>${codes.map(k=>{let sd=ini[k]||0,d=0,c=0;
       return`<tr class="sub"><td colspan="5">${k} · ${esc(accName(k))}</td></tr><tr><td></td><td class="muted">Saldo anterior a ${fd(f)}</td><td></td><td></td><td class="n">${eur(sd)}</td></tr>`+(mov[k]||[]).map(([e,l])=>{sd=r2(sd+l.d-l.c);d=r2(d+l.d);c=r2(c+l.c);return`<tr><td>${fd(e.date)}</td><td>${esc(e.concept)}</td><td class="n">${l.d?eur(l.d):""}</td><td class="n">${l.c?eur(l.c):""}</td><td class="n">${eur(sd)}</td></tr>`;}).join("")+`<tr class="eh"><td colspan="2">Total ${k}</td><td class="n">${eur(d)}</td><td class="n">${eur(c)}</td><td class="n">${eur(sd)}</td></tr>`;}).join("")||`<tr><td colspan="5" class="muted">Sin movimientos para esa selección y esas fechas.</td></tr>`}</table>`;}
+  if(ui.rep==="situacion"||ui.rep==="pyg"){var gAcc=list=>{if(!ui.bsl)return[];if(ui.bsl>=9)return list;const m={};for(const a of list){const k=a.code==="—"?"—":a.code.slice(0,ui.bsl),o=m[k]||(m[k]={code:k,v:0,label:a.code==="—"?a.label:null});o.v=r2(o.v+a.v);}return Object.values(m);};}
   if(ui.rep==="situacion"){const pe=(+t.slice(0,4)-1)+"-12-31",B=balanceSheet(S,t),P=balanceSheet(S,pe);
     const side=k=>B.secs.map((x,i)=>{const p=P.secs[i];if(x.side!==k||(!x.total&&!p.total&&!x.lines.some(l=>l.v)))return"";
-      return`<tr class="sub"><td colspan="2">${x.title}</td><td class="n">${eur(x.total)}</td><td class="n">${eur(p.total)}</td></tr>`+x.lines.map((l,j)=>{const q=p.lines[j];if(!l.v&&!q.v&&!l.accs.length)return"";
-        return`<tr class="eh"><td colspan="2">${l.label}</td><td class="n">${eur(l.v)}</td><td class="n">${eur(q.v)}</td></tr>`+l.accs.map(a=>{const pa=q.accs.find(z=>z.code===a.code);return`<tr><td>${a.code}</td><td>${esc(a.label||accName(a.code))}</td><td class="n">${eur(a.v)}</td><td class="n muted">${pa?eur(pa.v):""}</td></tr>`;}).join("");}).join("");}).join("");
-    body=`<table><tr><th colspan="2">Balance de situación (modelo de pymes)</th><th class="n">${fd(t)}</th><th class="n">${fd(pe)}</th></tr>
+      return`<tr class="sub"><td colspan="2">${x.title}</td><td class="n">${eur(x.total)}</td><td class="n">${eur(p.total)}</td></tr>`+x.lines.map((l,j)=>{const q=p.lines[j];if(!l.v&&!q.v&&!l.accs.length)return"";const LA=gAcc(l.accs),QA=gAcc(q.accs);
+        return`<tr class="eh"><td colspan="2">${l.label}</td><td class="n">${eur(l.v)}</td><td class="n">${eur(q.v)}</td></tr>`+LA.map(a=>{const pa=QA.find(z=>z.code===a.code);return`<tr><td>${a.code}</td><td>${esc(a.label||accName(a.code))}</td><td class="n">${eur(a.v)}</td><td class="n muted">${pa?eur(pa.v):""}</td></tr>`;}).join("");}).join("");}).join("");
+    body=bslSel()+`<table><tr><th colspan="2">Balance de situación (modelo de pymes)</th><th class="n">${fd(t)}</th><th class="n">${fd(pe)}</th></tr>
     <tr class="sub"><td colspan="4">ACTIVO</td></tr>${side("A")}<tr class="tot"><td colspan="2">TOTAL ACTIVO</td><td class="n">${eur(B.activo)}</td><td class="n">${eur(P.activo)}</td></tr>
     <tr class="sub"><td colspan="4">PATRIMONIO NETO Y PASIVO</td></tr>${side("P")}<tr class="tot"><td colspan="2">TOTAL PATRIMONIO NETO Y PASIVO</td><td class="n">${eur(B.pasivo)}</td><td class="n">${eur(P.pasivo)}</td></tr></table>
     <p class="small">${B.activo===B.pasivo?`<span class="pill good">Balance cuadrado</span>`:`<span class="pill bad">Descuadre ${eur(r2(B.activo-B.pasivo))}</span>`}</p>`;}
   if(ui.rep==="pyg"){const py=d=>(+d.slice(0,4)-1)+d.slice(4),R=pnlOfficial(S,f,t),Q=pnlOfficial(S,py(f),py(t));
-    body=`<table><tr><th colspan="2">Cuenta de pérdidas y ganancias (modelo de pymes)</th><th class="n">${fd(f)} a ${fd(t)}</th><th class="n">Mismo periodo del año anterior</th></tr>${R.map((r,i)=>{const q=Q[i];
+    body=bslSel()+`<table><tr><th colspan="2">Cuenta de pérdidas y ganancias (modelo de pymes)</th><th class="n">${fd(f)} a ${fd(t)}</th><th class="n">Mismo periodo del año anterior</th></tr>${R.map((r,i)=>{const q=Q[i];
       if(r.title)return`<tr class="${i===R.length-1?"tot":"sub"}"><td colspan="2">${r.title}</td><td class="n">${eur(r.v)}</td><td class="n">${eur(q.v)}</td></tr>`;if(!r.v&&!q.v)return"";
-      return`<tr class="eh"><td colspan="2">${r.label}</td><td class="n">${eur(r.v)}</td><td class="n">${eur(q.v)}</td></tr>`+r.accs.map(a=>{const pa=q.accs.find(z=>z.code===a.code);return`<tr><td>${a.code}</td><td>${esc(accName(a.code))}</td><td class="n">${eur(a.v)}</td><td class="n muted">${pa?eur(pa.v):""}</td></tr>`;}).join("");}).join("")}</table>
+      return`<tr class="eh"><td colspan="2">${r.label}</td><td class="n">${eur(r.v)}</td><td class="n">${eur(q.v)}</td></tr>`+gAcc(r.accs).map(a=>{const pa=gAcc(q.accs).find(z=>z.code===a.code);return`<tr><td>${a.code}</td><td>${esc(accName(a.code))}</td><td class="n">${eur(a.v)}</td><td class="n muted">${pa?eur(pa.v):""}</td></tr>`;}).join("");}).join("")}</table>
     <p class="small muted">Los ingresos figuran en positivo y los gastos en negativo.</p>`;}
   if(ui.rep==="iva"){const sec=(kind,title)=>{let b=0,c=0;const rows=[];
       for(const i of S.invoices.filter(i=>i.kind===kind&&i.date>=f&&i.date<=t&&(!ui.lq||Math.floor((+i.date.slice(5,7)-1)/3)+1===ui.lq)).sort((x,y)=>x.date<y.date?-1:x.date>y.date?1:x.id-y.id)){const t=invTotals(i),co=contact(i.contactId);
@@ -624,7 +725,7 @@ function vInformes(){const[f,t]=rng();const tabs=[["sumas","Sumas y saldos"],["m
   if(ui.rep==="plan"){const used=new Set();for(const e of S.entries)for(const l of e.lines)used.add(l.acc);for(const i of S.invoices)used.add(i.account);for(const a of S.assets)used.add(a.acc);for(const b of S.banks)used.add(b.acc);for(const c of S.contacts)if(c.acc)used.add(c.acc);
     body=`<form class="row" data-form="account" style="margin-bottom:10px"><label>Código (${S.digits} dígitos o más)<input id="a-code" required pattern="[0-9]{${S.digits},14}" style="width:170px"></label><label style="flex:1;min-width:200px">Nombre<input id="a-name" required></label><button class="pri" style="align-self:flex-end">Añadir cuenta</button></form>
     <p class="small muted">Para desglosar una cuenta, añade subcuentas con la misma raíz: por ejemplo 216001 Mesa de despacho y 216002 Sillas. Solo se pueden borrar las cuentas sin movimientos. «Cambiar número» cambia el código en todos los asientos, facturas, contactos, bancos y activos; si el número nuevo ya existe, las dos cuentas se fusionan.</p>
-    <table><tr><th>Código</th><th>Nombre</th><th></th></tr>${S.accounts.map(a=>`<tr><td>${a.code}</td><td>${esc(a.name)}</td><td class="n"><button class="link" data-act="acc-ren" data-acc="${a.code}">Cambiar número</button>${used.has(a.code)?`<span class="muted small" style="margin-left:6px">En uso</span>`:`<button class="link" data-act="acc-del" data-acc="${a.code}">Borrar</button>`}</td></tr>`).join("")}</table>`;}
+    <div class="row" style="margin-bottom:10px"><input id="plan-q" data-live="pq" type="search" placeholder="Buscar cuenta por código o nombre" value="${esc(ui.pq||"")}" style="max-width:340px" aria-label="Buscar cuenta"></div><table><tr><th>Código</th><th>Nombre</th><th></th></tr>${S.accounts.filter(a=>{const q=norm(ui.pq||"").trim();return!q||a.code.startsWith(q)||norm(a.name).startsWith(q)||norm(a.name).split(/\s+/).some(w=>w.startsWith(q))||norm(a.name).includes(q);}).map(a=>`<tr><td>${a.code}</td><td>${esc(a.name)}</td><td class="n"><button class="link" data-act="acc-ren" data-acc="${a.code}">Cambiar número</button>${used.has(a.code)?`<span class="muted small" style="margin-left:6px">En uso</span>`:`<button class="link" data-act="acc-del" data-acc="${a.code}">Borrar</button>`}</td></tr>`).join("")}</table>`;}
   return`<div class="head"><h1>Mayor y balances</h1><button data-act="tbl-csv">Exportar a Excel (.csv)</button></div>${ui.rep==="plan"?"":rangeBar()}<div class="tabs">${tabs.map(([k,n])=>`<button data-act="rep" data-rep="${k}" class="${ui.rep===k?"on":""}">${n}</button>`).join("")}</div><div class="card"><div class="tw">${body}</div></div>`;}
 
 /* Bancos */
@@ -643,7 +744,10 @@ function movForm(){modal(`<form class="dlg sm" data-form="mov"><h2>Nuevo movimie
 
 /* Impuestos */
 function vImpuestos(){const y=S.year,q=ui.q,soc=S.company.type==="sociedad";let body;
-  if(q===5){const r=tax347(S,y);body=`<div class="card"><h2>Modelo 347 · operaciones con terceros superiores a 3.005,06 €</h2><div class="tw"><table><tr><th>Tercero</th><th>NIF</th><th>Clave</th><th class="n">1T</th><th class="n">2T</th><th class="n">3T</th><th class="n">4T</th><th class="n">Importe anual</th></tr>${r.map(x=>`<tr><td>${esc(contact(x.contactId).name)}</td><td>${esc(contact(x.contactId).nif)}</td><td>${x.kind==="emitida"?"B · Ventas":"A · Compras"}</td>${x.q.map(v=>`<td class="n">${eur(v)}</td>`).join("")}<td class="n"><b>${eur(x.total)}</b></td></tr>`).join("")||`<tr><td colspan="8" class="muted">Ningún tercero supera el umbral en ${y}.</td></tr>`}</table></div><p class="small muted">Importes con IVA incluido. Quedan fuera las facturas con retención, porque esas operaciones se declaran en los modelos 190 o 180. Se presenta en febrero del año siguiente.</p></div>`;}
+  if(q===5){const r=tax347(S,y),tbl=(kind,title)=>{const L=r.filter(x=>x.kind===kind);let t=0,qs=[0,0,0,0];L.forEach(x=>{t=r2(t+x.total);x.q.forEach((v,k)=>qs[k]=r2(qs[k]+v));});
+      return`<div class="card"><h2>${title}</h2><div class="tw"><table><tr><th>NIF</th><th>Nombre o razón social</th><th>Provincia</th><th class="n">1T</th><th class="n">2T</th><th class="n">3T</th><th class="n">4T</th><th class="n">Importe anual</th></tr>${L.map(x=>{const c=contact(x.contactId);return`<tr><td>${esc(x.nif)} ${nifPill(c)}</td><td>${esc(x.name)}${x.ids.length>1?` <span class="small muted">(${x.ids.length} fichas con el mismo NIF)</span>`:""}</td><td>${esc(x.province)||`<span class="pill warn">Falta</span>`}</td>${x.q.map(v=>`<td class="n">${eur(v)}</td>`).join("")}<td class="n"><b>${eur(x.total)}</b></td></tr>`;}).join("")||`<tr><td colspan="8" class="muted">Nadie supera 3.005,06 € en ${y}.</td></tr>`}
+      ${L.length?`<tr class="tot"><td colspan="3">${L.length===1?"1 declarado":L.length+" declarados"}</td>${qs.map(v=>`<td class="n">${eur(v)}</td>`).join("")}<td class="n">${eur(t)}</td></tr>`:""}</table></div></div>`;};
+    body=`<p class="small muted" style="margin:0">Terceros con los que el total anual, IVA incluido, supera 3.005,06 € en ${y}. Se agrupan por NIF.</p>${tbl("recibida","Compras · clave A (proveedores)")}${tbl("emitida","Ventas · clave B (clientes)")}<p class="small muted">Quedan fuera las facturas con retención, porque esas operaciones se declaran en los modelos 190 o 180, y los asientos libres sin factura. Se presenta en febrero del año siguiente.</p>`;}
   else if(q===6){const r=tax390(S,y),rs=o=>Object.keys(o.rates).sort((a,b)=>b-a).map(k=>`<tr><td>${k} %</td><td class="n">${eur(o.rates[k].base)}</td><td class="n">${eur(o.rates[k].vat)}</td></tr>`).join("");
     body=`<div class="grid2"><div class="card"><div class="head"><h2>Modelo 390 · resumen anual de IVA</h2><span class="pill ${r.result>=0?"warn":"good"}">Resultado ${eur(r.result)}</span></div><div class="tw"><table><tr><th>Tipo</th><th class="n">Base</th><th class="n">Cuota</th></tr>
     <tr class="sub"><td colspan="3">IVA devengado · régimen general</td></tr>${rs(r.dev)}<tr><td><b>Total devengado</b></td><td class="n">${eur(r.dev.base)}</td><td class="n">${eur(r.dev.vat)}</td></tr>
@@ -664,7 +768,7 @@ function vImpuestos(){const y=S.year,q=ui.q,soc=S.company.type==="sociedad";let 
       :`<div class="head"><h2>Modelo 130 · pago fraccionado IRPF</h2><span class="pill ${i.result>0?"warn":"good"}">${i.result>0?"A ingresar "+eur(i.result):"Sin ingreso"}</span></div><div class="tw"><table><tr><td>Ingresos acumulados del año</td><td class="n">${eur(i.ing)}</td></tr><tr><td>Gastos deducibles acumulados</td><td class="n">${eur(i.gas)}</td></tr><tr><td>Rendimiento neto</td><td class="n">${eur(i.rend)}</td></tr><tr><td>20 % del rendimiento</td><td class="n">${eur(i.cuota)}</td></tr><tr><td>Retenciones soportadas acumuladas</td><td class="n">−${eur(i.ret)}</td></tr><tr><td>Pagos de trimestres anteriores</td><td class="n">−${eur(i.prev)}</td></tr><tr class="tot"><td>Resultado</td><td class="n">${eur(i.result)}</td></tr></table></div>`}
      <h2>Modelo 111 · retenciones de trabajo y profesionales</h2><div class="tw"><table><tr><th>Concepto</th><th class="n">Base</th><th class="n">Retención</th></tr><tr><td>Rendimientos del trabajo (nóminas contabilizadas)</td><td class="n">${eur(r.wb)}</td><td class="n">${eur(r.wr)}</td></tr><tr><td>Actividades profesionales (${r.n} facturas)</td><td class="n">${eur(r.base)}</td><td class="n">${eur(r.ret)}</td></tr><tr class="tot"><td colspan="2">Retenciones a ingresar</td><td class="n">${eur(r.total)}</td></tr></table></div>
      <h2>Modelo 115 · retenciones de alquileres</h2><div class="tw"><table><tr><th>Concepto</th><th class="n">Base</th><th class="n">Retención</th></tr><tr class="tot"><td>Alquileres con cuenta 621 (${al.n} facturas)</td><td class="n">${eur(al.base)}</td><td class="n">${eur(al.ret)}</td></tr></table></div></div></div>`;}
-  return`<div class="head"><h1>Impuestos ${y}</h1><button data-act="tbl-csv">Exportar a Excel (.csv)</button></div><div class="tabs">${[1,2,3,4].map(k=>`<button data-act="q" data-q="${k}" class="${q===k?"on":""}">${k}.º trimestre</button>`).join("")}<button data-act="q" data-q="6" class="${q===6?"on":""}">Anual · 390</button><button data-act="q" data-q="7" class="${q===7?"on":""}">Anual · 190 y 180</button><button data-act="q" data-q="5" class="${q===5?"on":""}">Anual · 347</button></div>
+  return`<div class="head"><h1>Impuestos ${y}</h1><label style="flex-direction:row;align-items:center;gap:8px">Ejercicio<select id="imp-y" style="width:auto">${[...new Set([now.getFullYear(),S.year,...S.invoices.map(i=>+i.date.slice(0,4))])].sort((a,b)=>b-a).map(x=>`<option ${x===y?"selected":""}>${x}</option>`).join("")}</select></label><button data-act="tbl-csv">Exportar a Excel (.csv)</button></div><div class="tabs">${[1,2,3,4].map(k=>`<button data-act="q" data-q="${k}" class="${q===k?"on":""}">${k}.º trimestre</button>`).join("")}<button data-act="q" data-q="6" class="${q===6?"on":""}">Anual · 390</button><button data-act="q" data-q="7" class="${q===7?"on":""}">Anual · 190 y 180</button><button data-act="q" data-q="5" class="${q===5?"on":""}">Anual · 347</button></div>
   <div class="note">Cálculos orientativos a partir de tus facturas, pensados para preparar los modelos, no para presentarlos. Cuaderna no envía nada a la Agencia Tributaria. Contrasta las cifras con tu asesor antes de presentar.</div>${body}`;}
 
 /* Ajustes */
@@ -682,7 +786,7 @@ function vAjustes(){const c=S.company,ys=[...new Set([now.getFullYear()+1,now.ge
 /* Modal y acciones */
 function modal(html){const m=$("#modal");m.innerHTML=html;m.classList.add("open");const f=$("input:not([type=hidden]),select",m);if(f)f.focus();}
 function closeModal(){$("#modal").classList.remove("open");$("#modal").innerHTML="";}
-function fail(msg){const e=$("#f-err");if(e)e.textContent=msg;}
+function fail(msg){const e=$("#modal.open #f-err")||$("#f-err");if(e)e.textContent=msg;}
 function done(){S.sample=S.sample&&false;save();closeModal();render();}
 function ask(text,label,fn){modal(`<div class="dlg sm"><h2>Confirmar</h2><p>${esc(text)}</p><div class="row" style="justify-content:flex-end"><button data-act="close">Cancelar</button><button class="pri" id="ask-ok">${esc(label)}</button></div></div>`);$("#ask-ok").onclick=()=>{fn();save();closeModal();render();};}
 async function saveFile(name,text,mime){
@@ -708,6 +812,12 @@ document.addEventListener("click",ev=>{const b=ev.target.closest("[data-act]");i
   else if(a==="con-edit")conForm(id);
   else if(a==="con-del"){if(S.invoices.some(i=>i.contactId===id))modal(`<div class="dlg sm"><h2>No se puede borrar</h2><p>Este contacto tiene facturas. Borra antes sus facturas.</p><div class="row" style="justify-content:flex-end"><button data-act="close">Entendido</button></div></div>`);else ask("Se borrará el contacto y su cuenta contable.","Borrar",()=>{const c=S.contacts.find(x=>x.id===id);if(c&&c.acc&&!S.entries.some(e=>e.lines.some(l=>l.acc===c.acc)))S.accounts=S.accounts.filter(a=>a.code!==c.acc);S.contacts=S.contacts.filter(x=>x.id!==id);});}
   else if(a==="ent-new")entForm();
+  else if(a==="ed-mode"){if(b.disabled)return;edOpen({mode:b.dataset.mode,pre:null,inv:null});}
+  else if(a==="ed-cancel"){ui.ed=null;ui.flash="";render();}
+  else if(a==="ed-open"){const e=S.entries.find(x=>x.id===id);if(!e)return;const k=e.src.slice(0,3);
+    if(!e.src)edOpen({mode:"normal",pre:{id:e.id,date:e.date,concept:e.concept,lines:e.lines.map(l=>({acc:l.acc,d:l.d,c:l.c}))}});
+    else if(k==="inv"){const inv=S.invoices.find(x=>"inv:"+x.id===e.src);edOpen({mode:inv.kind,inv:JSON.parse(JSON.stringify(inv))});}
+    else if(k==="pay")payForm(+e.src.slice(4));}
   else if(a==="ent-edit"){const e=S.entries.find(x=>x.id===id);entForm({id:e.id,date:e.date,concept:e.concept,lines:e.lines.map(l=>({acc:l.acc,d:l.d,c:l.c}))});}
   else if(a==="acc-ren"){const c=b.dataset.acc;modal(`<form class="dlg sm" data-form="renum"><h2>Cambiar número de la cuenta ${c}</h2><input type="hidden" id="n-from" value="${c}"><p>${esc(accName(c))}</p>
     <label>Número nuevo<input id="n-to" required inputmode="numeric" value="${c}"></label><div class="err" id="f-err"></div><div class="row" style="justify-content:flex-end"><button type="button" data-act="close">Cancelar</button><button class="pri" id="n-ok">Cambiar</button></div></form>`);}
@@ -720,7 +830,7 @@ document.addEventListener("click",ev=>{const b=ev.target.closest("[data-act]");i
   else if(a==="acc-quick"){const code=$("#e-ncode").value.trim(),name=$("#e-nname").value.trim();if(!/^\d+$/.test(code)||code.length<S.digits||!name)return fail("Para crear la cuenta escribe un código de "+S.digits+" cifras o más y un nombre.");
     if(S.accounts.some(x=>x.code===code))return fail("Ya existe la cuenta "+code+".");S.accounts.push({code,name});S.accounts.sort((x,y)=>x.code<y.code?-1:1);save();fail("");
     $$(".e-acc").forEach(sel=>{const cur=sel.value;sel.innerHTML=accOpts(()=>true,cur);});$("#e-lines").insertAdjacentHTML("beforeend",entRow({acc:code}));$("#e-ncode").value="";$("#e-nname").value="";}
-  else if(a==="ent-line")$("#e-lines").insertAdjacentHTML("beforeend",entRow());
+  else if(a==="ent-line"){const ls=readEnt(),df=r2(ls.reduce((x,l)=>x+l.d-l.c,0));$("#e-lines").insertAdjacentHTML("beforeend",entRow(df>0?{c:df}:df<0?{d:-df}:{}));updEnt();const ins=$$("#e-lines .pk-in");ins[ins.length-1].focus();}
   else if(a==="ent-del")ask("Se borrará este asiento manual.","Borrar",()=>{S.entries=S.entries.filter(e=>e.id!==id);});
   else if(a==="r-q"){const q=+b.dataset.q;[ui.from,ui.to]=q?qRange(S.year,q):yr();render();}
   else if(a==="acc-del"){S.accounts=S.accounts.filter(x=>x.code!==b.dataset.acc);save();render();}
@@ -763,12 +873,16 @@ document.addEventListener("click",ev=>{const b=ev.target.closest("[data-act]");i
 document.addEventListener("submit",ev=>{ev.preventDefault();const k=ev.target.dataset.form,v=id=>$("#"+id).value.trim();
   if(k==="invoice")saveInvoice();
   else if(k==="pay"){payInvoice(S,S.invoices.find(i=>i.id===+v("p-id")),v("p-date"),v("p-bank"));done();}
-  else if(k==="contact"){let c=S.contacts.find(x=>x.id===+v("c-id"));if(!c){c={id:S.seq++};S.contacts.push(c);}Object.assign(c,{type:v("c-type"),name:v("c-name"),nif:v("c-nif"),email:v("c-email"),address:v("c-address")});const ca=S.accounts.find(a=>a.code===contactAcc(S,c.id));if(ca)ca.name=c.name;done();}
-  else if(k==="entry"){const ls=readEnt(),d=r2(ls.reduce((a,l)=>a+l.d,0)),c=r2(ls.reduce((a,l)=>a+l.c,0));if(!ls.length||d!==c)return fail("El asiento debe tener importes y cuadrar: debe = haber.");if($("#e-save").checked)S.templates.push({id:"u"+S.seq++,name:v("e-concept"),concept:v("e-concept"),lines:$$("#e-lines tr").map(tr=>({acc:$(".e-acc",tr).value,d:+$(".e-d",tr).value||0,c:+$(".e-c",tr).value||0}))});const eid=+v("e-id"),old=S.entries.find(e=>e.id===eid);
+  else if(k==="contact"){const foreign=$("#c-foreign").checked,nif=foreign?v("c-nif"):nifNorm(v("c-nif")),e=nifErr(nif,foreign);if(e)return fail(e);
+    const dup=S.contacts.find(x=>x.id!==+v("c-id")&&x.type===v("c-type")&&nifNorm(x.nif)===nifNorm(nif));if(dup)return fail("Ya existe "+(dup.type==="cliente"?"un cliente":"un proveedor")+" con ese NIF: "+dup.name+".");
+    let c=S.contacts.find(x=>x.id===+v("c-id"));if(!c){c={id:S.seq++};S.contacts.push(c);}const F=["address","cp","city","province","country","phone","email"];
+    Object.assign(c,{type:v("c-type"),name:v("c-name"),nif,foreign});for(const f of F)c[f]=v("c-"+f);const ca=S.accounts.find(a=>a.code===contactAcc(S,c.id));if(ca)ca.name=c.name;done();}
+  else if(k==="entry"){const ls=readEnt(),d=r2(ls.reduce((a,l)=>a+l.d,0)),c=r2(ls.reduce((a,l)=>a+l.c,0));if(!ls.length||d!==c)return fail("El asiento debe tener importes y cuadrar: debe = haber.");if(ls.some(l=>!l.acc||!S.accounts.some(a=>a.code===l.acc)))return fail("Elige en la lista la cuenta de cada línea con importe.");if($("#e-save").checked)S.templates.push({id:"u"+S.seq++,name:v("e-concept"),concept:v("e-concept"),lines:$$("#e-lines tr").map(tr=>({acc:$(".e-acc",tr).value,d:+$(".e-d",tr).value||0,c:+$(".e-c",tr).value||0}))});const eid=+v("e-id"),old=S.entries.find(e=>e.id===eid);
     if(old){const prev=old.lines;old.date=v("e-date");old.concept=v("e-concept");old.lines=ls.map((l,k)=>{const p=prev[k],n={acc:l.acc,d:r2(l.d),c:r2(l.c),contact:null};if(p&&p.acc===n.acc&&p.d===n.d&&p.c===n.c){n.ok=p.ok;n.contact=p.contact||null;}return n;});}
-    else addEntry(S,v("e-date"),v("e-concept"),ls,"");done();}
+    else addEntry(S,v("e-date"),v("e-concept"),ls,"");const num=asNum(),sv=old||S.entries[S.entries.length-1];ui.flash=(old?"Asiento nº ":"Asiento nº ")+(num[sv.id]||"")+(old?" corregido.":" guardado.");ui.ed=null;done();}
   else if(k==="mov"){const amt=r2(+v("m-amount")),bk=v("m-bank"),ac=v("m-acc"),isIn=v("m-type")==="in";addEntry(S,v("m-date"),v("m-concept"),isIn?[{acc:bk,d:amt},{acc:ac,c:amt}]:[{acc:ac,d:amt},{acc:bk,c:amt}],"");ui.bank=bk;done();}
   else if(k==="doc"){const side=ev.target.dataset.side,lines=readLines();let cid=+v("f-contact");if(!lines.length)return fail("Añade al menos una línea.");
+    if(!cid){const e=v("f-newname")?nifErr(v("f-newnif"),false):"";if(e)return fail(e);}
     if(!cid){const name=v("f-newname");if(!name)return fail("Elige un contacto o escribe el nombre del nuevo.");const c={id:S.seq++,type:side==="venta"?"cliente":"proveedor",name,nif:"",address:"",email:""};S.contacts.push(c);cid=c.id;}
     addDoc(S,{side,type:ui.doc[side],number:v("f-number"),date:v("f-date"),contactId:cid,lines});done();}
   else if(k==="crud"){const c=CR[ev.target.dataset.name],id=+v("k-id");let r=S[c.key].find(x=>x.id===id);if(!r){r={id:S.seq++};S[c.key].push(r);}
@@ -787,10 +901,17 @@ document.addEventListener("input",ev=>{const t=ev.target;
   if(t.closest("[data-form=entry]"))updEnt();
   if(t.id==="n-to"){const f=t.closest("form");delete f.dataset.merge;$("#n-ok").textContent="Cambiar";fail("");}
   if(t.id==="flt"){ui.filter=t.value;const p=t.selectionStart;render();const n=$("#flt");n.focus();n.setSelectionRange(p,p);}
+  if(t.dataset.live){ui[t.dataset.live]=t.value;const id=t.id,p=t.selectionStart;render();const n=$("#"+id);n.focus();try{n.setSelectionRange(p,p);}catch(e){}}
+  if(t.id==="as-q"){ui.asq=t.value;$("#as-list").innerHTML=asList();}
+  if(t.classList.contains("pk-in")){const box=t.closest(".pk"),h=$(".pk-val",box);if(!box.dataset.free){const src=box.dataset.src;h.value=(src==="cliente"||src==="proveedor")?"0":"";}pkOpen(t);updTot();}
+  if(t.classList.contains("pk-val")){if(t.id==="f-contact"||t.id==="f-account")updTot();if(t.classList.contains("e-acc"))updEnt();}
 });
 document.addEventListener("change",ev=>{const t=ev.target;
   if(t.id==="mayor-flt"){ui.mayor=t.value;render();}
   if(t.id==="lvl"){ui.lvl=+t.value;render();}
+  if(t.id==="bsl"){ui.bsl=+t.value;render();}
+  if(t.id==="con-t"){ui.ct=t.value;render();}
+  if(t.id==="imp-y"){S.year=+t.value;save();render();}
   if(t.id==="r-from"||t.id==="r-to"){if(t.value){ui[t.id==="r-from"?"from":"to"]=t.value;if(ui.from>ui.to)ui[t.id==="r-from"?"to":"from"]=t.value;render();}}
   if(t.id==="f-item"&&t.value){const i=S.items.find(x=>x.id===+t.value);$("#f-lines").insertAdjacentHTML("beforeend",lineRow({desc:i.name,qty:1,price:t.dataset.sale==="1"?i.price:i.cost,vat:+i.vat,itemId:i.id}));t.value="";updTot();}
   if(t.id==="csv-bank"&&t.files[0]){const fr=new FileReader();fr.onload=()=>{const rows=parseBankCsv(String(fr.result)),r=reconcile(S,ui.bank,rows);save();render();
@@ -811,7 +932,17 @@ document.addEventListener("change",ev=>{const t=ev.target;
 document.addEventListener("mousemove",ev=>{const tip=$("#tip");if(!tip)return;const h=ev.target.closest&&ev.target.closest(".hit");if(!h){tip.style.display="none";return;}
   const box=tip.parentElement.getBoundingClientRect();tip.textContent=h.dataset.tip;tip.style.display="block";
   tip.style.left=Math.max(0,Math.min(ev.clientX-box.left+12,box.width-tip.offsetWidth))+"px";tip.style.top=Math.max(0,ev.clientY-box.top-34)+"px";});
-document.addEventListener("keydown",ev=>{if(ev.key==="Escape")closeModal();});
+document.addEventListener("keydown",ev=>{const t=ev.target;
+  if(t.classList&&t.classList.contains("pk-in")){const l=$(".pk-list",t.closest(".pk"));if(!l.hidden){const its=$$(".pk-it",l);let i=its.findIndex(x=>x.classList.contains("on"));
+    if(ev.key==="ArrowDown"||ev.key==="ArrowUp"){ev.preventDefault();if(!its.length)return;if(i>=0)its[i].classList.remove("on");i=ev.key==="ArrowDown"?Math.min(its.length-1,i+1):Math.max(0,i-1);its[i].classList.add("on");its[i].scrollIntoView({block:"nearest"});return;}
+    if(ev.key==="Enter"||(ev.key==="Tab"&&t.value.trim())){if(i>=0){if(ev.key==="Enter")ev.preventDefault();pkChoose(t,its[i]);}else if(ev.key==="Enter")ev.preventDefault();return;}
+    if(ev.key==="Escape"){pkClose(t);return;}}
+    else if(ev.key==="ArrowDown"){pkOpen(t);return;}else if(ev.key==="Enter"&&t.closest(".pk").dataset.free){return;}}
+  if(ev.key==="Escape")closeModal();});
+document.addEventListener("mousedown",ev=>{const it=ev.target.closest&&ev.target.closest(".pk-it");if(it&&pkCur){ev.preventDefault();pkChoose(pkCur,it);}});
+document.addEventListener("focusin",ev=>{const t=ev.target;if(t.classList&&t.classList.contains("pk-in")&&t.closest(".pk").dataset.src!=="accfree")pkOpen(t);});
+document.addEventListener("focusout",ev=>{const t=ev.target;if(t.classList&&t.classList.contains("pk-in"))setTimeout(()=>{if(document.activeElement!==t){pkBlur(t);pkClose(t);}},120);});
+window.addEventListener("scroll",()=>{if(pkCur)pkClose(pkCur);},true);
 window.addEventListener("hashchange",()=>{ui.filter="";closeModal();render();});
 init();
 </script>
