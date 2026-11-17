@@ -389,7 +389,7 @@ const VIEWS=[["","Resumen"],["panel","Panel"],["","Ventas"],["docsv","Ofertas, p
  ["","Compras y almacén"],["docsc","Pedidos y albaranes de compra"],["compras","Facturas recibidas"],["articulos","Artículos y stock"],
  ["","Tesorería"],["cartera","Cartera de cobros y pagos"],["bancos","Bancos y caja"],["","Contabilidad"],["asientos","Asientos"],["diario","Libro diario"],["informes","Mayor y balances"],["activos","Activos fijos"],["presupuesto","Presupuesto"],
  ["","Organización"],["contactos","Clientes y proveedores"],["proyectos","Proyectos"],["personal","Personal y nóminas"],["","Fiscal"],["impuestos","Impuestos"],["","Sistema"],["ajustes","Ajustes y copias"]];
-let ui={bsl:0,cq:"",ct:"",asq:"",ed:null,flash:"",pq:"",lvl:0,lq:0,doc:{venta:"oferta",compra:"pedido"},rep:"sumas",mayor:"430",q:Math.floor(now.getMonth()/3)+1,bank:null,filter:""};
+let ui={bsl:3,psl:9,cq:"",ct:"",asq:"",ed:null,flash:"",pq:"",lvl:0,lq:0,doc:{venta:"oferta",compra:"pedido"},rep:"sumas",mayor:"430",q:Math.floor(now.getMonth()/3)+1,bank:null,filter:""};
 function view(){const h=location.hash.replace("#","");return VIEWS.some(v=>v[0]===h&&h)?h:"panel";}
 function render(){const v=view();
   themeLabel();$("#co-name").textContent="Ejercicio "+S.year;
@@ -686,7 +686,8 @@ function updEnt(){if(!$("#e-tot"))return;const w=$("#e-warn");if(w)w.innerHTML=$
   $("#e-tot").innerHTML=`Debe <b>${eur(d)}</b> · Haber <b>${eur(c)}</b> · ${d===c?`<span class="pill good">Cuadrado</span>`:`<span class="pill bad">Descuadre ${eur(r2(d-c))}</span>`}`;}
 
 /* Informes */
-function bslSel(){return`<div class="row" style="margin-bottom:10px"><label style="min-width:260px">Detalle<select id="bsl">${[[0,"Solo epígrafes"],[3,"Epígrafes y cuentas (3 dígitos)"],[9,"Epígrafes y subcuentas"]].map(o=>`<option value="${o[0]}" ${(ui.bsl||0)===o[0]?"selected":""}>${o[1]}</option>`).join("")}</select></label></div>`;}
+const NAME3={"430":"Clientes","400":"Proveedores","410":"Acreedores por prestaciones de servicios","470":"Hacienda Pública, deudora por diversos conceptos","472":"Hacienda Pública, IVA soportado","473":"Hacienda Pública, retenciones y pagos a cuenta","475":"Hacienda Pública, acreedora por conceptos fiscales","476":"Organismos de la Seguridad Social, acreedores","477":"Hacienda Pública, IVA repercutido","465":"Remuneraciones pendientes de pago","572":"Bancos e instituciones de crédito","281":"Amortización acumulada del inmovilizado material","216":"Mobiliario","217":"Equipos para procesos de información"};
+function bslSel(){const id=ui.rep==="pyg"?"psl":"bsl",cur=ui[id];return`<div class="row" style="margin-bottom:10px"><label style="min-width:260px">Detalle<select id="${id}">${[[0,"Solo epígrafes"],[3,"Epígrafes y cuentas (clientes y proveedores sumados)"],[9,"Epígrafes y todas las subcuentas"]].map(o=>`<option value="${o[0]}" ${cur===o[0]?"selected":""}>${o[1]}</option>`).join("")}</select></label></div>`;}
 function vInformes(){const[f,t]=rng();const tabs=[["sumas","Sumas y saldos"],["mayor","Libro mayor"],["situacion","Balance de situación"],["pyg","Pérdidas y ganancias"],["iva","Libros de IVA"],["analitica","Analítica"],["plan","Plan de cuentas"]];
   let body="";
   if(ui.rep==="sumas"){const m0=balances(S,f,t,["reg:","cie:"]),m={};for(const k in m0){const g=ui.lvl?k.slice(0,ui.lvl):k,o=m[g]||(m[g]={d:0,c:0});o.d=r2(o.d+m0[k].d);o.c=r2(o.c+m0[k].c);}let a=0,b=0,c=0,d=0;
@@ -700,7 +701,7 @@ function vInformes(){const[f,t]=rng();const tabs=[["sumas","Sumas y saldos"],["m
     body=`<div class="row" style="margin-bottom:10px"><label style="min-width:300px">Cuenta, grupo o rango<div class="pk" data-src="acc" data-free="1"><input class="pk-in" id="mayor-flt" autocomplete="off" value="${esc(ui.mayor)}" placeholder="430001, 430, 400-410 o un nombre"><input type="hidden" class="pk-val"><div class="pk-list" hidden></div></div></label><span class="small muted" style="align-self:flex-end">Escribe un código o empieza a escribir un nombre y elige en la lista. 430 saca todos los clientes, 400 todos los proveedores y 400-410 un rango; vacío, todas las cuentas.</span></div>
     <table><tr><th>Fecha</th><th>Concepto</th><th class="n">Debe</th><th class="n">Haber</th><th class="n">Saldo</th></tr>${codes.map(k=>{let sd=ini[k]||0,d=0,c=0;
       return`<tr class="sub"><td colspan="5">${k} · ${esc(accName(k))}</td></tr><tr><td></td><td class="muted">Saldo anterior a ${fd(f)}</td><td></td><td></td><td class="n">${eur(sd)}</td></tr>`+(mov[k]||[]).map(([e,l])=>{sd=r2(sd+l.d-l.c);d=r2(d+l.d);c=r2(c+l.c);return`<tr><td>${fd(e.date)}</td><td>${esc(e.concept)}</td><td class="n">${l.d?eur(l.d):""}</td><td class="n">${l.c?eur(l.c):""}</td><td class="n">${eur(sd)}</td></tr>`;}).join("")+`<tr class="eh"><td colspan="2">Total ${k}</td><td class="n">${eur(d)}</td><td class="n">${eur(c)}</td><td class="n">${eur(sd)}</td></tr>`;}).join("")||`<tr><td colspan="5" class="muted">Sin movimientos para esa selección y esas fechas.</td></tr>`}</table>`;}
-  if(ui.rep==="situacion"||ui.rep==="pyg"){var gAcc=list=>{if(!ui.bsl)return[];if(ui.bsl>=9)return list;const m={};for(const a of list){const k=a.code==="—"?"—":a.code.slice(0,ui.bsl),o=m[k]||(m[k]={code:k,v:0,label:a.code==="—"?a.label:null});o.v=r2(o.v+a.v);}return Object.values(m);};}
+  if(ui.rep==="situacion"||ui.rep==="pyg"){var LV=ui.rep==="pyg"?ui.psl:ui.bsl,gAcc=list=>{if(!LV)return[];if(LV>=9)return list;const m={};for(const a of list){const k=a.code==="—"?"—":a.code.slice(0,LV),o=m[k]||(m[k]={code:k,v:0,label:a.code==="—"?a.label:(NAME3[k]||accName(k))});o.v=r2(o.v+a.v);}return Object.values(m);};}
   if(ui.rep==="situacion"){const pe=(+t.slice(0,4)-1)+"-12-31",B=balanceSheet(S,t),P=balanceSheet(S,pe);
     const side=k=>B.secs.map((x,i)=>{const p=P.secs[i];if(x.side!==k||(!x.total&&!p.total&&!x.lines.some(l=>l.v)))return"";
       return`<tr class="sub"><td colspan="2">${x.title}</td><td class="n">${eur(x.total)}</td><td class="n">${eur(p.total)}</td></tr>`+x.lines.map((l,j)=>{const q=p.lines[j];if(!l.v&&!q.v&&!l.accs.length)return"";const LA=gAcc(l.accs),QA=gAcc(q.accs);
@@ -712,7 +713,7 @@ function vInformes(){const[f,t]=rng();const tabs=[["sumas","Sumas y saldos"],["m
   if(ui.rep==="pyg"){const py=d=>(+d.slice(0,4)-1)+d.slice(4),R=pnlOfficial(S,f,t),Q=pnlOfficial(S,py(f),py(t));
     body=bslSel()+`<table><tr><th colspan="2">Cuenta de pérdidas y ganancias (modelo de pymes)</th><th class="n">${fd(f)} a ${fd(t)}</th><th class="n">Mismo periodo del año anterior</th></tr>${R.map((r,i)=>{const q=Q[i];
       if(r.title)return`<tr class="${i===R.length-1?"tot":"sub"}"><td colspan="2">${r.title}</td><td class="n">${eur(r.v)}</td><td class="n">${eur(q.v)}</td></tr>`;if(!r.v&&!q.v)return"";
-      return`<tr class="eh"><td colspan="2">${r.label}</td><td class="n">${eur(r.v)}</td><td class="n">${eur(q.v)}</td></tr>`+gAcc(r.accs).map(a=>{const pa=gAcc(q.accs).find(z=>z.code===a.code);return`<tr><td>${a.code}</td><td>${esc(accName(a.code))}</td><td class="n">${eur(a.v)}</td><td class="n muted">${pa?eur(pa.v):""}</td></tr>`;}).join("");}).join("")}</table>
+      return`<tr class="eh"><td colspan="2">${r.label}</td><td class="n">${eur(r.v)}</td><td class="n">${eur(q.v)}</td></tr>`+gAcc(r.accs).map(a=>{const pa=gAcc(q.accs).find(z=>z.code===a.code);return`<tr><td>${a.code}</td><td>${esc(a.label||accName(a.code))}</td><td class="n">${eur(a.v)}</td><td class="n muted">${pa?eur(pa.v):""}</td></tr>`;}).join("");}).join("")}</table>
     <p class="small muted">Los ingresos figuran en positivo y los gastos en negativo.</p>`;}
   if(ui.rep==="iva"){const sec=(kind,title)=>{let b=0,c=0;const rows=[];
       for(const i of S.invoices.filter(i=>i.kind===kind&&i.date>=f&&i.date<=t&&(!ui.lq||Math.floor((+i.date.slice(5,7)-1)/3)+1===ui.lq)).sort((x,y)=>x.date<y.date?-1:x.date>y.date?1:x.id-y.id)){const t=invTotals(i),co=contact(i.contactId);
@@ -910,6 +911,7 @@ document.addEventListener("change",ev=>{const t=ev.target;
   if(t.id==="mayor-flt"){ui.mayor=t.value;render();}
   if(t.id==="lvl"){ui.lvl=+t.value;render();}
   if(t.id==="bsl"){ui.bsl=+t.value;render();}
+  if(t.id==="psl"){ui.psl=+t.value;render();}
   if(t.id==="con-t"){ui.ct=t.value;render();}
   if(t.id==="imp-y"){S.year=+t.value;save();render();}
   if(t.id==="r-from"||t.id==="r-to"){if(t.value){ui[t.id==="r-from"?"from":"to"]=t.value;if(ui.from>ui.to)ui[t.id==="r-from"?"to":"from"]=t.value;render();}}
