@@ -389,7 +389,7 @@ const VIEWS=[["","Resumen"],["panel","Panel"],["","Ventas"],["docsv","Ofertas, p
  ["","Compras y almacén"],["docsc","Pedidos y albaranes de compra"],["compras","Facturas recibidas"],["articulos","Artículos y stock"],
  ["","Tesorería"],["cartera","Cartera de cobros y pagos"],["bancos","Bancos y caja"],["","Contabilidad"],["asientos","Asientos"],["diario","Libro diario"],["informes","Mayor y balances"],["activos","Activos fijos"],["presupuesto","Presupuesto"],
  ["","Organización"],["contactos","Clientes y proveedores"],["proyectos","Proyectos"],["personal","Personal y nóminas"],["","Fiscal"],["impuestos","Impuestos"],["","Sistema"],["ajustes","Ajustes y copias"]];
-let ui={bsl:3,psl:9,cq:"",ct:"",asq:"",ed:null,flash:"",pq:"",lvl:0,lq:0,doc:{venta:"oferta",compra:"pedido"},rep:"sumas",mayor:"430",q:Math.floor(now.getMonth()/3)+1,bank:null,filter:""};
+let ui={bsl:3,psl:9,pfmt:"gi",cq:"",ct:"",asq:"",ed:null,flash:"",pq:"",lvl:0,lq:0,doc:{venta:"oferta",compra:"pedido"},rep:"sumas",mayor:"430",q:Math.floor(now.getMonth()/3)+1,bank:null,filter:""};
 function view(){const h=location.hash.replace("#","");return VIEWS.some(v=>v[0]===h&&h)?h:"panel";}
 function render(){const v=view();
   themeLabel();$("#co-name").textContent="Ejercicio "+S.year;
@@ -687,6 +687,10 @@ function updEnt(){if(!$("#e-tot"))return;const w=$("#e-warn");if(w)w.innerHTML=$
 
 /* Informes */
 const NAME3={"430":"Clientes","400":"Proveedores","410":"Acreedores por prestaciones de servicios","470":"Hacienda Pública, deudora por diversos conceptos","472":"Hacienda Pública, IVA soportado","473":"Hacienda Pública, retenciones y pagos a cuenta","475":"Hacienda Pública, acreedora por conceptos fiscales","476":"Organismos de la Seguridad Social, acreedores","477":"Hacienda Pública, IVA repercutido","465":"Remuneraciones pendientes de pago","572":"Bancos e instituciones de crédito","281":"Amortización acumulada del inmovilizado material","216":"Mobiliario","217":"Equipos para procesos de información"};
+const NAME2={"60":"Compras","61":"Variación de existencias","62":"Servicios exteriores","63":"Tributos","64":"Gastos de personal","65":"Otros gastos de gestión","66":"Gastos financieros","67":"Pérdidas procedentes de activos no corrientes y gastos excepcionales","68":"Dotaciones para amortizaciones","69":"Pérdidas por deterioro y otras dotaciones",
+  "70":"Ventas de mercaderías, de producción propia, de servicios, etc.","71":"Variación de existencias","73":"Trabajos realizados para la empresa","74":"Subvenciones, donaciones y legados","75":"Otros ingresos de gestión","76":"Ingresos financieros","77":"Beneficios procedentes de activos no corrientes e ingresos excepcionales","79":"Excesos y aplicaciones de provisiones y de pérdidas por deterioro"};
+function pylSel(){const gi=ui.pfmt!=="pymes";return`<div class="row" style="margin-bottom:10px"><label style="min-width:260px">Formato<select id="pfmt"><option value="gi" ${gi?"selected":""}>Gastos (grupo 6) e ingresos (grupo 7)</option><option value="pymes" ${gi?"":"selected"}>Modelo de pymes (por epígrafes)</option></select></label>
+  <label style="min-width:240px">Detalle<select id="psl">${(gi?[[0,"Por subgrupos (2 dígitos)"],[3,"Por cuentas (3 dígitos)"],[9,"Por subcuentas"]]:[[0,"Solo epígrafes"],[3,"Epígrafes y cuentas (3 dígitos)"],[9,"Epígrafes y subcuentas"]]).map(o=>`<option value="${o[0]}" ${ui.psl===o[0]?"selected":""}>${o[1]}</option>`).join("")}</select></label></div>`;}
 function bslSel(){const id=ui.rep==="pyg"?"psl":"bsl",cur=ui[id];return`<div class="row" style="margin-bottom:10px"><label style="min-width:260px">Detalle<select id="${id}">${[[0,"Solo epígrafes"],[3,"Epígrafes y cuentas (clientes y proveedores sumados)"],[9,"Epígrafes y todas las subcuentas"]].map(o=>`<option value="${o[0]}" ${cur===o[0]?"selected":""}>${o[1]}</option>`).join("")}</select></label></div>`;}
 function vInformes(){const[f,t]=rng();const tabs=[["sumas","Sumas y saldos"],["mayor","Libro mayor"],["situacion","Balance de situación"],["pyg","Pérdidas y ganancias"],["iva","Libros de IVA"],["analitica","Analítica"],["plan","Plan de cuentas"]];
   let body="";
@@ -710,8 +714,18 @@ function vInformes(){const[f,t]=rng();const tabs=[["sumas","Sumas y saldos"],["m
     <tr class="sub"><td colspan="4">ACTIVO</td></tr>${side("A")}<tr class="tot"><td colspan="2">TOTAL ACTIVO</td><td class="n">${eur(B.activo)}</td><td class="n">${eur(P.activo)}</td></tr>
     <tr class="sub"><td colspan="4">PATRIMONIO NETO Y PASIVO</td></tr>${side("P")}<tr class="tot"><td colspan="2">TOTAL PATRIMONIO NETO Y PASIVO</td><td class="n">${eur(B.pasivo)}</td><td class="n">${eur(P.pasivo)}</td></tr></table>
     <p class="small">${B.activo===B.pasivo?`<span class="pill good">Balance cuadrado</span>`:`<span class="pill bad">Descuadre ${eur(r2(B.activo-B.pasivo))}</span>`}</p>`;}
-  if(ui.rep==="pyg"){const py=d=>(+d.slice(0,4)-1)+d.slice(4),R=pnlOfficial(S,f,t),Q=pnlOfficial(S,py(f),py(t));
-    body=bslSel()+`<table><tr><th colspan="2">Cuenta de pérdidas y ganancias (modelo de pymes)</th><th class="n">${fd(f)} a ${fd(t)}</th><th class="n">Mismo periodo del año anterior</th></tr>${R.map((r,i)=>{const q=Q[i];
+  if(ui.rep==="pyg"&&ui.pfmt!=="pymes"){const py=d=>(+d.slice(0,4)-1)+d.slice(4),m=balances(S,f,t,"reg:"),mp=balances(S,py(f),py(t),"reg:");
+    const sec=g=>{const val=(mm,c)=>{const b=mm[c];return!b?0:g==="6"?r2(b.d-b.c):r2(b.c-b.d);},grp={};let tv=0,tp=0;
+      for(const c of new Set([...Object.keys(m),...Object.keys(mp)])){if(c[0]!==g)continue;const v=val(m,c),pv=val(mp,c);if(!v&&!pv)continue;tv=r2(tv+v);tp=r2(tp+pv);
+        const k=LV>=9?c:c.slice(0,LV?3:2),o=grp[k]||(grp[k]={code:k,v:0,p:0,label:LV>=9?accName(c):LV?(NAME3[k]||accName(k)):(NAME2[k]||accName(k))});o.v=r2(o.v+v);o.p=r2(o.p+pv);}
+      return{rows:Object.values(grp).sort((a,b)=>a.code<b.code?-1:1),tv,tp};};
+    const G=sec("6"),I=sec("7"),res=r2(I.tv-G.tv),resp=r2(I.tp-G.tp),line=x=>`<tr><td>${x.code}</td><td>${esc(x.label)}</td><td class="n">${eur(x.v)}</td><td class="n muted">${x.p?eur(x.p):""}</td></tr>`;
+    body=pylSel()+`<table><tr><th colspan="2">Cuenta de pérdidas y ganancias</th><th class="n">${fd(f)} a ${fd(t)}</th><th class="n">Mismo periodo del año anterior</th></tr>
+    <tr class="sub"><td colspan="2">GASTOS (grupo 6)</td><td class="n">${eur(G.tv)}</td><td class="n">${eur(G.tp)}</td></tr>${G.rows.map(line).join("")||`<tr><td colspan="4" class="muted">Sin gastos en el periodo.</td></tr>`}
+    <tr class="sub"><td colspan="2">INGRESOS (grupo 7)</td><td class="n">${eur(I.tv)}</td><td class="n">${eur(I.tp)}</td></tr>${I.rows.map(line).join("")||`<tr><td colspan="4" class="muted">Sin ingresos en el periodo.</td></tr>`}
+    <tr class="tot"><td colspan="2">RESULTADO (${res>=0?"beneficio":"pérdida"}): ingresos menos gastos</td><td class="n">${eur(res)}</td><td class="n">${eur(resp)}</td></tr></table>`;}
+  if(ui.rep==="pyg"&&ui.pfmt==="pymes"){const py=d=>(+d.slice(0,4)-1)+d.slice(4),R=pnlOfficial(S,f,t),Q=pnlOfficial(S,py(f),py(t));
+    body=pylSel()+`<table><tr><th colspan="2">Cuenta de pérdidas y ganancias (modelo de pymes)</th><th class="n">${fd(f)} a ${fd(t)}</th><th class="n">Mismo periodo del año anterior</th></tr>${R.map((r,i)=>{const q=Q[i];
       if(r.title)return`<tr class="${i===R.length-1?"tot":"sub"}"><td colspan="2">${r.title}</td><td class="n">${eur(r.v)}</td><td class="n">${eur(q.v)}</td></tr>`;if(!r.v&&!q.v)return"";
       return`<tr class="eh"><td colspan="2">${r.label}</td><td class="n">${eur(r.v)}</td><td class="n">${eur(q.v)}</td></tr>`+gAcc(r.accs).map(a=>{const pa=gAcc(q.accs).find(z=>z.code===a.code);return`<tr><td>${a.code}</td><td>${esc(a.label||accName(a.code))}</td><td class="n">${eur(a.v)}</td><td class="n muted">${pa?eur(pa.v):""}</td></tr>`;}).join("");}).join("")}</table>
     <p class="small muted">Los ingresos figuran en positivo y los gastos en negativo.</p>`;}
@@ -912,6 +926,7 @@ document.addEventListener("change",ev=>{const t=ev.target;
   if(t.id==="lvl"){ui.lvl=+t.value;render();}
   if(t.id==="bsl"){ui.bsl=+t.value;render();}
   if(t.id==="psl"){ui.psl=+t.value;render();}
+  if(t.id==="pfmt"){ui.pfmt=t.value;render();}
   if(t.id==="con-t"){ui.ct=t.value;render();}
   if(t.id==="imp-y"){S.year=+t.value;save();render();}
   if(t.id==="r-from"||t.id==="r-to"){if(t.value){ui[t.id==="r-from"?"from":"to"]=t.value;if(ui.from>ui.to)ui[t.id==="r-from"?"to":"from"]=t.value;render();}}
