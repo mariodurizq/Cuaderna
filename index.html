@@ -264,11 +264,21 @@ function tax347(S,y){const m={};for(const i of S.invoices){if(i.date.slice(0,4)!
 function settleVat(S,y,q){const src="iva:"+y+":"+q;dropEntries(S,src);const[,t]=qRange(y,q),m=balances(S,null,t,"cie:"+y),ls=[];let df=0;
   for(const k of Object.keys(m).sort().reverse()){if(!k.startsWith("477")&&!k.startsWith("472"))continue;const v=r2(m[k].d-m[k].c);if(!v)continue;df=r2(df-v);ls.push(v>0?{acc:k,c:v}:{acc:k,d:-v});}
   if(!ls.length)return null;if(df)ls.push(df>0?{acc:x6("4750"),c:df}:{acc:x6("4700"),d:-df});return addEntry(S,t,"Liquidación de IVA "+q+"T "+y,ls,src);}
-function closeYear(S,y){for(const p of["reg:","cie:","ape:"])dropEntries(S,p+y);const f=y+"-01-01",t=y+"-12-31",m=balances(S,f,t),ls=[];let tot=0;
-  for(const k of Object.keys(m).sort()){if(k[0]!=="6"&&k[0]!=="7")continue;const v=r2(m[k].d-m[k].c);if(!v)continue;tot=r2(tot+v);ls.push(v>0?{acc:k,c:v}:{acc:k,d:-v});}
-  if(ls.length){if(tot)ls.push(tot>0?{acc:x6("129"),d:tot}:{acc:x6("129"),c:-tot});addEntry(S,t,"Regularización de ingresos y gastos "+y,ls,"reg:"+y);}
-  const b=balances(S,null,t),c1=[],c2=[];for(const k of Object.keys(b).sort()){const v=r2(b[k].d-b[k].c);if(!v)continue;c1.push(v>0?{acc:k,c:v}:{acc:k,d:-v});c2.push(v>0?{acc:k,d:v}:{acc:k,c:-v});}
-  if(!c1.length)return null;addEntry(S,t,"Asiento de cierre "+y,c1,"cie:"+y);addEntry(S,(y+1)+"-01-01","Asiento de apertura "+(y+1),c2,"ape:"+y);return true;}
+function closePlan(S,y){const T={entries:S.entries.filter(e=>!["reg:","cie:","ape:"].some(q=>e.src===q+y))},f=y+"-01-01",t=y+"-12-31",m=balances(T,f,t),reg=[];let tot=0;
+  for(const k of Object.keys(m).sort()){if(k[0]!=="6"&&k[0]!=="7")continue;const v=r2(m[k].d-m[k].c);if(!v)continue;tot=r2(tot+v);reg.push(v>0?{acc:k,c:v}:{acc:k,d:-v});}
+  if(reg.length&&tot)reg.push(tot>0?{acc:x6("129"),d:tot}:{acc:x6("129"),c:-tot});
+  const b=balances(T,null,t);for(const l of reg){const o=b[l.acc]||(b[l.acc]={d:0,c:0});o.d=r2(o.d+(l.d||0));o.c=r2(o.c+(l.c||0));}
+  const cie=[],ape=[];for(const k of Object.keys(b).sort()){const v=r2(b[k].d-b[k].c);if(!v)continue;cie.push(v>0?{acc:k,c:v}:{acc:k,d:-v});ape.push(v>0?{acc:k,d:v}:{acc:k,c:-v});}
+  return{reg,cie,ape,result:r2(-tot)};}
+function closeYear(S,y){for(const p of["reg:","cie:","ape:"])dropEntries(S,p+y);const P=closePlan(S,y);
+  if(P.reg.length)addEntry(S,y+"-12-31","Regularización de ingresos y gastos "+y,P.reg,"reg:"+y);
+  if(!P.cie.length)return null;addEntry(S,y+"-12-31","Asiento de cierre "+y,P.cie,"cie:"+y);addEntry(S,(y+1)+"-01-01","Asiento de apertura "+(y+1),P.ape,"ape:"+y);
+  S.closings=S.closings||{};if(S.closings[y]!=="def")S.closings[y]="prov";return true;}
+function undoClose(S,y){for(const p of["reg:","cie:","ape:"])dropEntries(S,p+y);if(S.closings)delete S.closings[y];}
+function closeState(S,y){const has=S.entries.some(e=>e.src==="cie:"+y||e.src==="ape:"+y);if(!has)return{status:"abierto",stale:false,diff:0};
+  const net=ls=>{const o={};for(const l of ls)o[l.acc]=r2((o[l.acc]||0)+(l.d||0)-(l.c||0));return o;},P=closePlan(S,y),cur=S.entries.find(e=>e.src==="ape:"+y),
+    a=net(P.ape),b=net(cur?cur.lines:[]),keys=new Set([...Object.keys(a),...Object.keys(b)]);let diff=0;for(const k of keys)if(r2((a[k]||0)-(b[k]||0)))diff++;
+  return{status:S.closings&&S.closings[y]==="def"?"definitivo":"provisional",stale:diff>0,diff};}
 function assetCum(a,y){const y0=+a.date.slice(0,4);if(y<y0)return 0;const st=new Date(a.date+"T12:00:00"),en=new Date(y0,11,31,12);
   const frac=Math.min(1,(Math.round((en-st)/864e5)+1)/365);return r2(Math.min(a.cost,a.cost/a.years*(frac+(y-y0))));}
 function assetDep(a,y){return r2(assetCum(a,y)-assetCum(a,y-1));}
@@ -308,7 +318,7 @@ function parseBankCsv(text){const rows=[];for(const ln of text.split(/\r?\n/)){i
 function importInvoices(S,text){let n=0,skip=0;const iso=x=>{const m=/^(\d{2})[\/-](\d{2})[\/-](\d{4})$/.exec(x||"");return m?m[3]+"-"+m[2]+"-"+m[1]:(x||"");};
   for(const ln of text.replace(/^﻿/,"").split(/\r?\n/)){if(!ln.trim())continue;const f=ln.split(";").map(x=>x.trim().replace(/^"|"$/g,"").replace(/""/g,'"'));
     const kind=(f[0]||"").toLowerCase();if(kind==="tipo")continue;const date=iso(f[2]),base=parseNum(f[6]),iva=parseNum(f[7])||0,irpf=parseNum(f[8])||0;
-    if((kind!=="emitida"&&kind!=="recibida")||!f[1]||!/^\d{4}-\d{2}-\d{2}$/.test(date)||isNaN(base)||S.invoices.some(i=>i.kind===kind&&i.number===f[1]&&i.date===date)){skip++;continue;}
+    if((kind!=="emitida"&&kind!=="recibida")||!f[1]||!/^\d{4}-\d{2}-\d{2}$/.test(date)||isNaN(base)||(S.closings&&S.closings[+date.slice(0,4)]==="def")||S.invoices.some(i=>i.kind===kind&&i.number===f[1]&&i.date===date)){skip++;continue;}
     const type=kind==="emitida"?"cliente":"proveedor",name=f[4]||"(sin nombre)",nif=f[5]||"";
     let c=S.contacts.find(x=>x.type===type&&((nif&&x.nif===nif)||x.name.toLowerCase()===name.toLowerCase()));if(!c){c={id:S.seq++,type,name,nif,address:"",email:""};S.contacts.push(c);}
     const due=iso(f[3]),inv={id:S.seq++,kind,number:f[1],date,due:/^\d{4}-\d{2}-\d{2}$/.test(due)?due:addDays(date,30),contactId:c.id,account:x6(kind==="emitida"?"705":"629"),irpf:base?r2(irpf/base*100):0,
@@ -375,19 +385,20 @@ async function init(){let d=null;try{d=await dbGet();}catch(e){}
   DB=d;DB.created=DB.created||Date.now();if(!DB.companies[DB.current])DB.current=Object.keys(DB.companies)[0];S=DB.companies[DB.current];ensure();render();}
 function useCompany(id){DB.current=id;S=DB.companies[id];ensure();ui.bank=null;ui.from=null;save();closeModal();render();}
 function newCompany(data){let n=1;while(DB.companies["c"+n])n++;DB.companies["c"+n]=data;useCompany("c"+n);}
-function ensure(){for(const k of["assets","items","moves","docs","contracts","opps","projects","staff"])S[k]=S[k]||[];S.budgets=S.budgets||{};if(!S.templates)S.templates=defTemplates();
+function ensure(){S.closings=S.closings||{};for(const k of["assets","items","moves","docs","contracts","opps","projects","staff"])S[k]=S[k]||[];S.budgets=S.budgets||{};if(!S.templates)S.templates=defTemplates();
   DIG=S.digits||6;if(!S.digits)migrate6(S);DIG=S.digits;if(S.pgcv!==PGCV){for(const[c,n]of PGC)addAcc(S,x6(c),n);S.pgcv=PGCV;}}
 function save(){if(!DB)return;DB.companies[DB.current]=S;dbPut(DB).then(()=>{saveErr=false;},()=>{try{localStorage.setItem(KEY2,JSON.stringify(DB));saveErr=false;}catch(e){if(!saveErr){saveErr=true;render();}}});}
 const accName=c=>{const a=S.accounts.find(x=>x.code===c)||S.accounts.find(x=>x.code===x6(c))||S.accounts.find(x=>x.code.startsWith(c));return a?a.name:"";};
 function rng(){if(ui.ry!==S.year||!ui.from){ui.ry=S.year;[ui.from,ui.to]=yr();}return[ui.from,ui.to];}
 function rangeBar(){const[f,t]=rng();return`<div class="row"><label>Desde<input type="date" id="r-from" value="${f}" style="width:auto"></label><label>Hasta<input type="date" id="r-to" value="${t}" style="width:auto"></label><div class="tabs" style="align-self:flex-end"><button data-act="r-q" data-q="0">Año</button>${[1,2,3,4].map(k=>`<button data-act="r-q" data-q="${k}">${k}T</button>`).join("")}</div></div>`;}
-const byDate=(a,b)=>a.date<b.date?-1:a.date>b.date?1:a.id-b.id;
+const SRK=e=>e.src.startsWith("ape:")?0:e.src.startsWith("reg:")?2:e.src.startsWith("cie:")?3:1,byDate=(a,b)=>a.date<b.date?-1:a.date>b.date?1:(SRK(a)-SRK(b))||a.id-b.id;
+const isLocked=d=>!!d&&!!S.closings&&S.closings[+String(d).slice(0,4)]==="def",lockMsg=d=>"El ejercicio "+String(d).slice(0,4)+" está cerrado definitivamente. Para cambiar algo de ese año, reábrelo en Cierre y apertura.";
 const contact=id=>S.contacts.find(c=>c.id===id)||{name:"(sin contacto)",nif:"",address:""};
 const yr=()=>[S.year+"-01-01",S.year+"-12-31"];
 const inYear=i=>i.date.slice(0,4)===String(S.year);
 const VIEWS=[["","Resumen"],["panel","Panel"],["","Ventas"],["docsv","Ofertas, pedidos y albaranes"],["ventas","Facturas emitidas"],["contratos","Contratos"],["crm","Oportunidades"],
  ["","Compras y almacén"],["docsc","Pedidos y albaranes de compra"],["compras","Facturas recibidas"],["articulos","Artículos y stock"],
- ["","Tesorería"],["cartera","Cartera de cobros y pagos"],["bancos","Bancos y caja"],["","Contabilidad"],["asientos","Asientos"],["diario","Libro diario"],["informes","Mayor y balances"],["activos","Activos fijos"],["presupuesto","Presupuesto"],
+ ["","Tesorería"],["cartera","Cartera de cobros y pagos"],["bancos","Bancos y caja"],["","Contabilidad"],["asientos","Asientos"],["diario","Libro diario"],["informes","Mayor y balances"],["activos","Activos fijos"],["presupuesto","Presupuesto"],["cierre","Cierre y apertura"],
  ["","Organización"],["contactos","Clientes y proveedores"],["proyectos","Proyectos"],["personal","Personal y nóminas"],["","Fiscal"],["impuestos","Impuestos"],["","Sistema"],["ajustes","Ajustes y copias"]];
 let ui={bsl:3,psl:9,pfmt:"gi",cq:"",ct:"",asq:"",ed:null,flash:"",pq:"",lvl:0,lq:0,doc:{venta:"oferta",compra:"pedido"},rep:"sumas",mayor:"430",q:Math.floor(now.getMonth()/3)+1,bank:null,filter:""};
 function view(){const h=location.hash.replace("#","");return VIEWS.some(v=>v[0]===h&&h)?h:"panel";}
@@ -398,8 +409,10 @@ function render(){const v=view();
   const days=Math.floor((Date.now()-(DB.lastExport||DB.created))/864e5);
   const warn=(saveErr?`<div class="banner" style="background:var(--bad-soft);color:var(--bad)"><span>No se han podido guardar los cambios en este navegador. Exporta una copia ahora para no perder el trabajo.</span><button data-act="export-all">Exportar todo</button></div>`:"")
     +(!S.sample&&S.entries.length&&days>=7?`<div class="banner"><span>Hace ${days} días que no exportas una copia de seguridad.</span><button data-act="export-all">Exportar ahora</button></div>`:"");
-  const banner=warn+(S.sample?`<div class="banner"><span>Estás viendo datos de ejemplo. Bórralos para empezar con tu contabilidad real.</span><button data-act="wipe">Empezar en blanco</button></div>`:"");
-  const keep=$("#ed");$("#main").innerHTML=banner+({panel:vPanel,ventas:()=>vInvoices("emitida"),compras:()=>vInvoices("recibida"),contactos:vContacts,docsv:()=>vDocs("venta"),docsc:()=>vDocs("compra"),articulos:vArticulos,contratos:vContratos,crm:vCRM,proyectos:vProyectos,personal:vPersonal,cartera:vCartera,activos:vActivos,presupuesto:vPresupuesto,asientos:vAsientos,diario:vDiario,informes:vInformes,bancos:vBancos,impuestos:vImpuestos,ajustes:vAjustes}[v])();
+  const cy=[...new Set(S.entries.map(e=>+e.date.slice(0,4)))].sort(),pend=cy.filter(y=>closeState(S,y).status==="abierto"&&S.entries.some(e=>e.src.slice(0,4)!=="ape:"&&+e.date.slice(0,4)>y)),stl=cy.filter(y=>closeState(S,y).stale);
+  const cbn=v==="cierre"?"":(pend.length?`<div class="banner"><span>El ejercicio ${pend[0]} no tiene cierre ni apertura, y ya hay movimientos de ${pend[0]+1}. Ciérralo para empezar ${pend[0]+1} con los saldos pendientes.</span><a class="btn" href="#cierre" style="text-decoration:none">Cierre y apertura</a></div>`:"")+(stl.length?`<div class="banner"><span>El cierre de ${stl.join(", ")} está desactualizado: hay cambios posteriores en ese año. Actualiza el cierre y la apertura.</span><a class="btn" href="#cierre" style="text-decoration:none">Cierre y apertura</a></div>`:"");
+  const banner=warn+cbn+(S.sample?`<div class="banner"><span>Estás viendo datos de ejemplo. Bórralos para empezar con tu contabilidad real.</span><button data-act="wipe">Empezar en blanco</button></div>`:"");
+  const keep=$("#ed");$("#main").innerHTML=banner+({panel:vPanel,ventas:()=>vInvoices("emitida"),compras:()=>vInvoices("recibida"),contactos:vContacts,docsv:()=>vDocs("venta"),docsc:()=>vDocs("compra"),articulos:vArticulos,contratos:vContratos,crm:vCRM,proyectos:vProyectos,personal:vPersonal,cartera:vCartera,activos:vActivos,presupuesto:vPresupuesto,cierre:vCierre,asientos:vAsientos,diario:vDiario,informes:vInformes,bancos:vBancos,impuestos:vImpuestos,ajustes:vAjustes}[v])();
   const nw=$("#ed");if(keep&&nw&&keep.dataset.key===nw.dataset.key)nw.replaceWith(keep);
   if(v==="asientos")edInit();
 }
@@ -609,6 +622,22 @@ function vActivos(){const y=S.year;let tc=0,ta=0;
   ${S.assets.length?`<tr class="tot"><td colspan="3">Total</td><td class="n">${eur(tc)}</td><td colspan="2"></td><td class="n">${eur(ta)}</td><td class="n">${eur(r2(tc-ta))}</td><td></td></tr>`:""}</table></div>
   <p class="small muted">Amortización lineal, prorrateada por días el año de alta, con asiento 681 a 281 a 31 de diciembre. Dar de alta un activo no contabiliza su compra: regístrala como factura recibida con una cuenta del grupo 2.</p></div>`;}
 
+/* Cierre y apertura */
+function vCierre(){const ys=[...new Set(S.entries.filter(e=>!e.src.startsWith("ape:")).map(e=>+e.date.slice(0,4)))].sort((a,b)=>a-b);
+  const rows=ys.map(y=>{const st=closeState(S,y),res=pnl(S,y+"-01-01",y+"-12-31").result,ape=S.entries.find(e=>e.src==="ape:"+y),tot=ape?r2(ape.lines.reduce((a,l)=>a+l.d,0)):0;
+    const pill=st.status==="abierto"?`<span class="pill neu">Abierto</span>`:st.status==="definitivo"?`<span class="pill good">Cerrado definitivamente</span>`:`<span class="pill warn">Cierre provisional</span>`;
+    const acts=st.status==="abierto"?`<button class="pri" data-act="cl-close" data-y="${y}">Cerrar ${y} y abrir ${y+1}</button>`
+      :st.status==="provisional"?`<button ${st.stale?'class="pri"':""} data-act="cl-update" data-y="${y}">Actualizar cierre y apertura</button><button data-act="cl-def" data-y="${y}">Cierre definitivo</button><button class="link" data-act="cl-undo" data-y="${y}">Deshacer</button>`
+      :`<button data-act="cl-reopen" data-y="${y}">Reabrir ${y}</button>`;
+    return`<tr><td><b>${y}</b></td><td class="n">${eur(res)}</td><td>${pill}${st.stale?` <span class="pill bad">Desactualizado · ${st.diff} ${st.diff===1?"cuenta":"cuentas"}</span>`:""}</td><td>${ape?`Apertura de ${y+1}: ${ape.lines.length} cuentas, ${eur(tot)}`:"—"}</td><td class="n"><div class="row" style="justify-content:flex-end">${acts}</div></td></tr>`
+      +(ape?`<tr><td></td><td colspan="4"><details><summary class="small muted">Ver el asiento de apertura de ${y+1}</summary><div class="tw"><table class="small"><tr><th>Cuenta</th><th>Nombre</th><th class="n">Debe</th><th class="n">Haber</th></tr>${ape.lines.map(l=>`<tr><td>${l.acc}</td><td>${esc(accName(l.acc))}</td><td class="n">${l.d?eur(l.d):""}</td><td class="n">${l.c?eur(l.c):""}</td></tr>`).join("")}</table></div></details></td></tr>`:"");}).join("");
+  return`<div class="head"><h1>Cierre y apertura</h1></div>
+  <div class="note" style="max-width:none">Cada ejercicio se cierra a 31 de diciembre con dos asientos (regularización de ingresos y gastos contra la 129, y cierre de todas las cuentas) y el siguiente se abre el 1 de enero con los saldos pendientes. Lo habitual:
+  <ol style="margin:6px 0 0;padding-left:18px"><li><b>En enero</b>, cuando empieza el movimiento del año nuevo: <b>Cerrar y abrir</b>. Queda como cierre provisional, con los saldos que haya en ese momento.</li>
+  <li><b>Durante los meses siguientes</b>, si se registran facturas, amortizaciones o ajustes del año anterior, el cierre queda <b>desactualizado</b> y el programa lo avisa. <b>Actualizar cierre y apertura</b> rehace los tres asientos con los saldos definitivos.</li>
+  <li><b>Al terminar</b> (cuentas anuales, impuesto de sociedades): <b>Cierre definitivo</b>. Bloquea los cambios en ese año. Se puede reabrir si hace falta.</li></ol></div>
+  <div class="card"><div class="tw"><table><tr><th>Ejercicio</th><th class="n">Resultado</th><th>Estado</th><th>Apertura del año siguiente</th><th></th></tr>${rows||`<tr><td colspan="5" class="muted">Todavía no hay movimientos.</td></tr>`}</table></div></div>`;}
+
 /* Presupuesto */
 function vPresupuesto(){const y=S.year,b=S.budgets[y]||{},[f,t]=yr(),m=balances(S,f,t,"reg:");let pi=0,ri=0,pe=0,re=0;
   const row=a=>{const inc=a.code[0]==="7",x=m[a.code]||{d:0,c:0},real=inc?r2(x.c-x.d):r2(x.d-x.c),p=b[a.code]||0;if(inc){pi=r2(pi+p);ri=r2(ri+real);}else{pe=r2(pe+p);re=r2(re+real);}
@@ -645,7 +674,7 @@ function vDiario(){const[f,t]=rng(),num={};S.entries.filter(inYear).sort(byDate)
     const tag=(TAG?`<span class="pill ${TAG[0]}">${TAG[1]}</span> `:"")+(!e.src?`<button class="link" data-act="ent-dup" data-id="${e.id}">Duplicar</button>`:"")+(!e.src||/^(inv|pay)/.test(e.src)?`<button class="link" data-act="ed-open" data-id="${e.id}">Editar</button>`:"")+(/^(inv|pay|reg|cie|ape)/.test(e.src)?"":`<button class="link" data-act="ent-del" data-id="${e.id}">Borrar</button>`);
     return`<tr class="eh"><td>${num[e.id]||""}</td><td>${fd(e.date)}</td><td colspan="2">${esc(e.concept)}</td><td class="n" colspan="2">${tag}</td></tr>`+e.lines.map(l=>{td=r2(td+l.d);tc=r2(tc+l.c);
       return`<tr><td></td><td></td><td>${l.acc}</td><td>${esc(accName(l.acc))}${l.contact?` <span class="muted">· ${esc(contact(l.contact).name)}</span>`:""}</td><td class="n">${l.d?eur(l.d):""}</td><td class="n">${l.c?eur(l.c):""}</td></tr>`;}).join("");}).join("");
-  return`<div class="head"><h1>Libro diario ${S.year}</h1><div class="row"><button data-act="tbl-csv">Exportar a Excel (.csv)</button>${S.entries.some(e=>e.src==="reg:"+S.year||e.src==="cie:"+S.year)?`<span class="pill good">Ejercicio cerrado</span><button data-act="year-open">Deshacer cierre</button>`:`<button data-act="year-close">Cerrar ejercicio ${S.year}</button>`}<button class="pri" data-act="ent-new">Nuevo asiento</button></div></div>
+  return`<div class="head"><h1>Libro diario ${S.year}</h1><div class="row"><button data-act="tbl-csv">Exportar a Excel (.csv)</button>${(()=>{const st=closeState(S,S.year);return st.status==="abierto"?`<button data-act="year-close">Cerrar ejercicio ${S.year}</button>`:`<span class="pill ${st.stale?"warn":"good"}">${st.status==="definitivo"?"Cerrado definitivamente":"Cierre provisional"}${st.stale?" · desactualizado":""}</span><a class="btn" href="#cierre" style="text-decoration:none">Cierre y apertura</a>`;})()}<button class="pri" data-act="ent-new">Nuevo asiento</button></div></div>
   ${rangeBar()}<div class="card"><div class="tw"><table><tr><th>Nº</th><th>Fecha</th><th>Cuenta</th><th>Concepto</th><th class="n">Debe</th><th class="n">Haber</th></tr>${rows||`<tr><td colspan="6" class="muted">Sin asientos.</td></tr>`}
   <tr class="tot"><td colspan="4">Totales</td><td class="n">${eur(td)}</td><td class="n">${eur(tc)}</td></tr></table></div></div>`;}
 function entRow(l){l=l||{};return`<tr><td style="min-width:200px">${pk("acc",null,"e-acc",l.acc||"",accLabel(l.acc),"Código o nombre de la cuenta")}</td><td style="width:130px"><input class="e-d" type="number" step="any" min="0" value="${l.d||""}" aria-label="Debe"></td><td style="width:130px"><input class="e-c" type="number" step="any" min="0" value="${l.c||""}" aria-label="Haber"></td><td style="width:40px"><button type="button" class="link" data-act="eline-del" aria-label="Quitar línea">✕</button></td></tr>`;}
@@ -814,6 +843,14 @@ function csv(){const rows=[["tipo","numero","fecha","vencimiento","contacto","ni
   return"﻿"+rows.map(r=>r.map(x=>typeof x==="number"?String(x).replace(".",","):'"'+String(x).replace(/"/g,'""')+'"').join(";")).join("\r\n");}
 document.addEventListener("click",ev=>{const b=ev.target.closest("[data-act]");if(!b){if(ev.target.id==="modal")closeModal();return;}
   const a=b.dataset.act,id=+b.dataset.id,inv=S.invoices.find(i=>i.id===id);
+  {const en=S.entries.find(x=>x.id===id),yr_=S.year+"-12-31",dueC=S.contracts.filter(c=>c.next&&c.next<=TODAY).map(c=>c.next).sort()[0],cy=b.dataset.y?b.dataset.y+"-12-31":null;
+   const L={"inv-unpay":()=>[inv&&inv.paid],"inv-del":()=>[inv&&inv.date,inv&&inv.paid],"ent-del":()=>[en&&en.date],"iva-post":()=>[yr_],"iva-undo":()=>[yr_],"dep-post":()=>[yr_],"payroll-post":()=>[yr_],"contracts-run":()=>[dueC],"year-close":()=>[yr_],"year-open":()=>[yr_],"cl-close":()=>[cy],"cl-update":()=>[cy],"cl-undo":()=>[cy],"cl-def":()=>[]}[a];
+   const bad=L&&L().find(isLocked);if(bad){modal(`<div class="dlg sm"><h2>Ejercicio cerrado</h2><p>${lockMsg(bad)}</p><div class="row" style="justify-content:flex-end"><a class="btn" href="#cierre" style="text-decoration:none">Cierre y apertura</a><button data-act="close">Cerrar</button></div></div>`);return;}}
+  if(a==="cl-close"){const y=+b.dataset.y;ask("Se cerrará "+y+" a 31/12/"+y+" y se abrirá "+(y+1)+" el 01/01/"+(y+1)+" con los saldos que hay ahora. Quedará como cierre provisional: podrás actualizarlo cuando termines de registrar "+y+".","Cerrar y abrir",()=>closeYear(S,y));return;}
+  if(a==="cl-update"){const y=+b.dataset.y;closeYear(S,y);save();render();modal(`<div class="dlg sm"><h2>Cierre de ${y} actualizado</h2><p>Se han rehecho la regularización y el cierre a 31/12/${y} y la apertura a 01/01/${y+1} con los saldos actuales.</p><div class="row" style="justify-content:flex-end"><button data-act="close">Cerrar</button></div></div>`);return;}
+  if(a==="cl-undo"){const y=+b.dataset.y;ask("Se borrarán la regularización, el cierre de "+y+" y la apertura de "+(y+1)+".","Deshacer",()=>undoClose(S,y));return;}
+  if(a==="cl-def"){const y=+b.dataset.y,st=closeState(S,y);ask((st.stale?"Primero se actualizarán el cierre y la apertura con los saldos actuales. ":"")+"Después "+y+" quedará cerrado definitivamente: no se podrá anotar ni cambiar nada con fecha de "+y+" hasta que lo reabras.","Cierre definitivo",()=>{if(st.stale)closeYear(S,y);S.closings[y]="def";});return;}
+  if(a==="cl-reopen"){const y=+b.dataset.y;S.closings[y]="prov";save();render();return;}
   if(a==="close")closeModal();
   else if(a==="theme"){const t=themeNow()==="dark"?"light":"dark";document.documentElement.dataset.theme=t;try{localStorage.setItem(TKEY,t);}catch(e){}themeLabel();}
   else if(a==="inv-new")invForm(b.dataset.kind);
@@ -857,8 +894,8 @@ document.addEventListener("click",ev=>{const b=ev.target.closest("[data-act]");i
   else if(a==="bank-new")modal(`<form class="dlg sm" data-form="bank"><h2>Nueva cuenta bancaria</h2><label>Nombre (por ejemplo, el banco)<input id="b-name" required></label><div class="row" style="justify-content:flex-end"><button type="button" data-act="close">Cancelar</button><button class="pri">Crear</button></div></form>`);
   else if(a==="iva-post"){if(settleVat(S,S.year,ui.q)){save();render();}else modal(`<div class="dlg sm"><h2>Nada que liquidar</h2><p>No hay IVA repercutido ni soportado pendiente hasta el final de este trimestre.</p><div class="row" style="justify-content:flex-end"><button data-act="close">Cerrar</button></div></div>`);}
   else if(a==="iva-undo"){dropEntries(S,"iva:"+S.year+":"+ui.q);save();render();}
-  else if(a==="year-close")ask("Se crearán tres asientos: regularización de ingresos y gastos y cierre a 31/12/"+S.year+", y apertura a 01/01/"+(S.year+1)+". Podrás deshacerlo.","Cerrar ejercicio",()=>closeYear(S,S.year));
-  else if(a==="year-open"){for(const p of["reg:","cie:","ape:"])dropEntries(S,p+S.year);save();render();}
+  else if(a==="year-close")ask("Se crearán tres asientos: regularización de ingresos y gastos y cierre a 31/12/"+S.year+", y apertura a 01/01/"+(S.year+1)+". Quedará como cierre provisional: podrás actualizarlo o deshacerlo en Cierre y apertura.","Cerrar ejercicio",()=>closeYear(S,S.year));
+  else if(a==="year-open"){undoClose(S,S.year);save();render();}
   else if(a==="dep-post"){const n=postDep(S,S.year);save();render();modal(`<div class="dlg sm"><h2>Amortización ${S.year}</h2><p>${n?n+" asientos de amortización contabilizados a 31/12/"+S.year+".":"No hay cuota que amortizar este año."}</p><div class="row" style="justify-content:flex-end"><button data-act="close">Cerrar</button></div></div>`);}
   else if(a==="asset-new")modal(`<form class="dlg sm" data-form="asset"><h2>Nuevo activo fijo</h2><div class="form"><label>Descripción<input id="x-name" required></label><label>Fecha de alta<input id="x-date" type="date" required value="${TODAY}"></label><label>Coste (sin IVA)<input id="x-cost" type="number" step="any" min="0.01" required></label><label>Vida útil (años)<input id="x-years" type="number" step="1" min="1" required value="4"></label><label>Cuenta<select id="x-acc">${accOpts(c=>c.code[0]==="2"&&c.code.slice(0,2)!=="28",x6("217"))}</select></label></div><div class="row" style="justify-content:flex-end"><button type="button" data-act="close">Cancelar</button><button class="pri">Guardar</button></div></form>`);
   else if(a==="asset-del")ask("Se borrará el activo y sus asientos de amortización.","Borrar",()=>{S.entries=S.entries.filter(e=>!e.src.startsWith("amo:"+id+":"));S.assets=S.assets.filter(x=>x.id!==id);});
@@ -886,6 +923,9 @@ document.addEventListener("click",ev=>{const b=ev.target.closest("[data-act]");i
   else if(a==="wipe")ask("Se borrarán todas las facturas, contactos y asientos. Exporta antes una copia si la necesitas.","Borrar todo",()=>{const c=S.sample?null:S.company;S=blank(now.getFullYear());if(c)S.company=c;addBank(S,"Cuenta corriente");});
 });
 document.addEventListener("submit",ev=>{ev.preventDefault();const k=ev.target.dataset.form,v=id=>$("#"+id).value.trim();
+  {const g=id=>{const e=$("#"+id);return e?e.value:null;},ie=S.invoices.find(i=>i.id===+(g("f-id")||g("p-id")||0)),ee=S.entries.find(x=>x.id===+(g("e-id")||0));
+   const ds={entry:[g("e-date"),ee&&ee.date],invoice:[g("f-date"),ie&&ie.date,ie&&ie.paid],pay:[g("p-date"),ie&&ie.paid],mov:[g("m-date")]}[k];
+   const bad=ds&&ds.find(isLocked);if(bad){fail(lockMsg(bad));return;}}
   if(k==="invoice")saveInvoice();
   else if(k==="pay"){payInvoice(S,S.invoices.find(i=>i.id===+v("p-id")),v("p-date"),v("p-bank"));done();}
   else if(k==="contact"){const foreign=$("#c-foreign").checked,nif=foreign?v("c-nif"):nifNorm(v("c-nif")),e=nifErr(nif,foreign);if(e)return fail(e);
