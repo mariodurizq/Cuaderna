@@ -25,6 +25,7 @@ El manual completo está en [`Manual-Cuaderna.pdf`](Manual-Cuaderna.pdf). Las no
 - Pantalla de Asientos: asientos libres y facturas recibidas o emitidas con el asiento a la vista, búsqueda de asientos y corrección.
 - Búsqueda de cuentas, clientes y proveedores mientras se escribe.
 - Ficha de clientes y proveedores con NIF obligatorio y comprobado.
+- Cierre y apertura del ejercicio: cierre provisional, aviso cuando queda desactualizado, actualización y cierre definitivo con bloqueo.
 - Diario, mayor y balances por rango de fechas; mayor por cuenta, grupo o rango de cuentas.
 - Libros registro de IVA, exportación de informes a CSV e importación de facturas desde CSV.
 - Modo claro y oscuro.
