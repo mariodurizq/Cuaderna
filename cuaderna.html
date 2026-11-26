@@ -81,6 +81,10 @@ label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600;
 .tabs button.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:600}
 .banner{background:var(--warn-soft);color:var(--warn);border-radius:8px;padding:10px 14px;font-size:14px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
 .note{background:var(--accent-soft);border-radius:8px;padding:10px 14px;font-size:13.5px;max-width:75ch}
+.yrs{display:flex;flex-wrap:wrap;gap:4px;padding:0 8px}
+.yr{padding:3px 10px;font-size:13px;border-radius:99px;display:inline-flex;align-items:center;gap:5px}
+.yr.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+.yd{display:inline-block;width:7px;height:7px;border-radius:50%}
 .pk{position:relative;min-width:0}
 .pk-list{position:fixed;z-index:30;max-height:280px;overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:6px;box-shadow:0 6px 24px rgba(0,0,0,.18)}
 .pk-it{padding:7px 10px;cursor:pointer;font-size:14px;display:flex;gap:8px;justify-content:space-between}
@@ -123,6 +127,7 @@ label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600;
   <aside>
     <div class="brand">Cuaderna<small id="co-name"></small></div>
     <select id="co-sel" aria-label="Empresa" style="margin:0 8px;width:calc(100% - 16px)"></select>
+    <div><div class="small muted" style="padding:0 10px 4px">Ejercicio</div><div id="yr-tabs" class="yrs" role="tablist" aria-label="Ejercicio"></div></div>
     <nav id="nav"></nav>
     <button id="theme" data-act="theme" style="margin:0 8px"></button>
   </aside>
@@ -392,6 +397,7 @@ const accName=c=>{const a=S.accounts.find(x=>x.code===c)||S.accounts.find(x=>x.c
 function rng(){if(ui.ry!==S.year||!ui.from){ui.ry=S.year;[ui.from,ui.to]=yr();}return[ui.from,ui.to];}
 function rangeBar(){const[f,t]=rng();return`<div class="row"><label>Desde<input type="date" id="r-from" value="${f}" style="width:auto"></label><label>Hasta<input type="date" id="r-to" value="${t}" style="width:auto"></label><div class="tabs" style="align-self:flex-end"><button data-act="r-q" data-q="0">Año</button>${[1,2,3,4].map(k=>`<button data-act="r-q" data-q="${k}">${k}T</button>`).join("")}</div></div>`;}
 const SRK=e=>e.src.startsWith("ape:")?0:e.src.startsWith("reg:")?2:e.src.startsWith("cie:")?3:1,byDate=(a,b)=>a.date<b.date?-1:a.date>b.date?1:(SRK(a)-SRK(b))||a.id-b.id;
+const WD=()=>{const y=+TODAY.slice(0,4);return S.year===y?TODAY:S.year<y?S.year+"-12-31":S.year+"-01-01";};
 const isLocked=d=>!!d&&!!S.closings&&S.closings[+String(d).slice(0,4)]==="def",lockMsg=d=>"El ejercicio "+String(d).slice(0,4)+" está cerrado definitivamente. Para cambiar algo de ese año, reábrelo en Cierre y apertura.";
 const contact=id=>S.contacts.find(c=>c.id===id)||{name:"(sin contacto)",nif:"",address:""};
 const yr=()=>[S.year+"-01-01",S.year+"-12-31"];
@@ -404,6 +410,9 @@ let ui={bsl:3,psl:9,pfmt:"gi",cq:"",ct:"",asq:"",ed:null,flash:"",pq:"",lvl:0,lq
 function view(){const h=location.hash.replace("#","");return VIEWS.some(v=>v[0]===h&&h)?h:"panel";}
 function render(){const v=view();
   themeLabel();$("#co-name").textContent="Ejercicio "+S.year;
+  {const ys=[...new Set([now.getFullYear(),S.year,...S.entries.map(e=>+e.date.slice(0,4)),...S.invoices.map(i=>+i.date.slice(0,4))])].filter(Boolean).sort((a,b)=>a-b);
+   $("#yr-tabs").innerHTML=ys.map(y=>{const st=closeState(S,y).status,dot=st==="definitivo"?`<i class="yd" style="background:var(--good)"></i>`:st==="provisional"?`<i class="yd" style="background:var(--warn)"></i>`:"";
+     return`<button class="yr ${y===S.year?"on":""}" role="tab" aria-selected="${y===S.year}" data-act="yr" data-y="${y}" title="${st==="definitivo"?"Cerrado definitivamente":st==="provisional"?"Cierre provisional":"Abierto"}">${y}${dot}</button>`;}).join("")+`<button class="yr" data-act="yr" data-y="${Math.max(...ys)+1}" title="Empezar a trabajar en ${Math.max(...ys)+1}">＋ ${Math.max(...ys)+1}</button>`;}
   $("#co-sel").innerHTML=Object.keys(DB.companies).map(k=>`<option value="${k}" ${k===DB.current?"selected":""}>${esc(DB.companies[k].company.name)}</option>`).join("")+`<option value="+">＋ Nueva empresa…</option>`;
   $("#nav").innerHTML=VIEWS.map(([id,t])=>id?`<a href="#${id}" class="${id===v?"on":""}">${t}</a>`:`<div class="sep">${t}</div>`).join("");
   const days=Math.floor((Date.now()-(DB.lastExport||DB.created))/864e5);
@@ -474,7 +483,7 @@ function invFormHtml(kind,inv,inline){const em=kind==="emitida",type=em?"cliente
   <div class="row" style="justify-content:space-between"><div class="row"><button type="button" data-act="line-add">Añadir línea</button>${itemPick(em)}</div><div id="f-tot" class="small"></div></div>
   <div id="f-prev"></div>
   <div class="err" id="f-err"></div><div class="row" style="justify-content:flex-end">${inline?`<button type="button" data-act="ed-cancel">${inv.id?"Cancelar la edición":"Limpiar"}</button>`:`<button type="button" data-act="close">Cancelar</button>`}<button class="pri">${inv.id?"Guardar cambios":"Guardar y contabilizar"}</button></div></form>`;}
-function newInv(kind){const em=kind==="emitida";return{id:0,kind,number:em?nextNumber(S,+TODAY.slice(0,4)):"",date:TODAY,due:addDays(TODAY,30),contactId:0,account:x6(em?"705":"629"),irpf:0,lines:[{desc:"",qty:1,price:0,vat:21}]};}
+function newInv(kind){const em=kind==="emitida";return{id:0,kind,number:em?nextNumber(S,S.year):"",date:WD(),due:addDays(WD(),30),contactId:0,account:x6(em?"705":"629"),irpf:0,lines:[{desc:"",qty:1,price:0,vat:21}]};}
 function invForm(kind,inv){modal(invFormHtml(kind,inv||newInv(kind),false));updTot();}
 function readLines(){return $$("#f-lines tr").map(tr=>({desc:$(".l-desc",tr).value.trim(),qty:+$(".l-qty",tr).value||0,price:+$(".l-price",tr).value||0,vat:+$(".l-vat",tr).value,itemId:+tr.dataset.item||0})).filter(l=>l.desc||l.qty*l.price);}
 function updTot(){if(!$("#f-tot"))return;const t=invTotals({lines:readLines(),irpf:+($("#f-irpf")||{}).value||0});
@@ -511,7 +520,7 @@ function invView(id){const i=S.invoices.find(x=>x.id===id);if(!i)return;const t=
   <div class="row" style="justify-content:flex-end">${EMBEDDED?`<span class="small muted">La impresión a PDF funciona al abrir el archivo en tu PC.</span>`:`<button data-act="print">Imprimir / PDF</button>`}<button data-act="close">Cerrar</button></div></div>`);}
 function payForm(id){const i=S.invoices.find(x=>x.id===id);if(!S.accounts.some(a=>a.code.slice(0,2)==="57"))return;
   modal(`<form class="dlg sm" data-form="pay"><h2>${i.kind==="emitida"?"Cobrar":"Pagar"} factura ${esc(i.number)}</h2><input type="hidden" id="p-id" value="${id}"><p>Importe: <b>${eur(invTotals(i).total)}</b></p>
-  <div class="form"><label>Fecha<input id="p-date" type="date" required value="${i.paid||TODAY}"></label><label>Cuenta<select id="p-bank">${bankOpts(i.bank)}</select></label></div>
+  <div class="form"><label>Fecha<input id="p-date" type="date" required value="${i.paid||WD()}"></label><label>Cuenta<select id="p-bank">${bankOpts(i.bank)}</select></label></div>
   <div class="row" style="justify-content:flex-end"><button type="button" data-act="close">Cancelar</button><button class="pri">Confirmar</button></div></form>`);}
 
 /* Buscador de cuentas y contactos */
@@ -559,7 +568,7 @@ function vDocs(side){const ty=ui.doc[side],fl=FLOW[side],k=fl.indexOf(ty),nx=k<f
    <td class="n">${d.status==="abierto"?`<button class="link" data-act="doc-conv" data-id="${d.id}">${nx}</button>`:""}<button class="link" data-act="doc-del" data-id="${d.id}">Borrar</button></td></tr>`).join("")||`<tr><td colspan="7" class="muted">No hay ${DN[ty].toLowerCase()}.</td></tr>`}</table></div>
   <p class="small muted">${side==="venta"?"Circuito: oferta → pedido → albarán → factura.":"Circuito: pedido → albarán → factura recibida."} El albarán mueve el stock de los artículos; la factura crea el asiento contable.</p></div>`;}
 function docForm(side){const ty=ui.doc[side],type=side==="venta"?"cliente":"proveedor";
-  modal(`<form class="dlg" data-form="doc" data-side="${side}"><h2>Nuevo ${D1[ty]} de ${side}</h2><div class="form"><label>Número<input id="f-number" required value="${docNumber(S,side,ty)}"></label><label>Fecha<input id="f-date" type="date" required value="${TODAY}"></label>
+  modal(`<form class="dlg" data-form="doc" data-side="${side}"><h2>Nuevo ${D1[ty]} de ${side}</h2><div class="form"><label>Número<input id="f-number" required value="${docNumber(S,side,ty)}"></label><label>Fecha<input id="f-date" type="date" required value="${WD()}"></label>
   <label>${side==="venta"?"Cliente":"Proveedor"}${pk(type,"f-contact","",0,"","Escribe el nombre, el NIF o la cuenta")}</label><label>Nombre (si es nuevo)<input id="f-newname"></label><label>NIF (si es nuevo)<input id="f-newnif"></label></div>
   <div class="tw"><table><thead><tr><th>Concepto</th><th>Cant.</th><th>Precio</th><th>IVA %</th><th></th></tr></thead><tbody id="f-lines">${lineRow({desc:"",qty:1,price:0,vat:21})}</tbody></table></div>
   <div class="row" style="justify-content:space-between"><div class="row"><button type="button" data-act="line-add">Añadir línea</button>${itemPick(side==="venta")}</div><div id="f-tot" class="small"></div></div>
@@ -679,7 +688,7 @@ function vDiario(){const[f,t]=rng(),num={};S.entries.filter(inYear).sort(byDate)
   <tr class="tot"><td colspan="4">Totales</td><td class="n">${eur(td)}</td><td class="n">${eur(tc)}</td></tr></table></div></div>`;}
 function entRow(l){l=l||{};return`<tr><td style="min-width:200px">${pk("acc",null,"e-acc",l.acc||"",accLabel(l.acc),"Código o nombre de la cuenta")}</td><td style="width:130px"><input class="e-d" type="number" step="any" min="0" value="${l.d||""}" aria-label="Debe"></td><td style="width:130px"><input class="e-c" type="number" step="any" min="0" value="${l.c||""}" aria-label="Haber"></td><td style="width:40px"><button type="button" class="link" data-act="eline-del" aria-label="Quitar línea">✕</button></td></tr>`;}
 function entFormHtml(pre){pre=pre||{concept:"",lines:[{},{}]};return`<form data-form="entry" style="display:flex;flex-direction:column;gap:14px"><input type="hidden" id="e-id" value="${pre.id||0}">
-  <div class="form"><label>Plantilla<select id="e-tpl"><option value="">Usar plantilla…</option>${S.templates.map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join("")}</select></label><label>Fecha<input id="e-date" type="date" required value="${pre.date||TODAY}"></label><label style="grid-column:span 2">Concepto<input id="e-concept" required value="${esc(pre.concept)}"></label></div>
+  <div class="form"><label>Plantilla<select id="e-tpl"><option value="">Usar plantilla…</option>${S.templates.map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join("")}</select></label><label>Fecha<input id="e-date" type="date" required value="${pre.date||WD()}"></label><label style="grid-column:span 2">Concepto<input id="e-concept" required value="${esc(pre.concept)}"></label></div>
   <div class="tw"><table><thead><tr><th>Cuenta</th><th>Debe</th><th>Haber</th><th></th></tr></thead><tbody id="e-lines">${pre.lines.map(entRow).join("")}</tbody></table></div>
   <div class="row" style="justify-content:space-between"><button type="button" data-act="ent-line">Añadir línea</button><div id="e-tot" class="small"></div></div><div id="e-warn"></div>
   <details><summary class="small muted">Crear una cuenta nueva sin salir del asiento</summary><div class="row" style="margin-top:8px"><input id="e-ncode" placeholder="Código, ${S.digits} dígitos" style="width:150px" aria-label="Código de la cuenta nueva"><input id="e-nname" placeholder="Nombre de la cuenta" style="flex:1;min-width:180px;width:auto" aria-label="Nombre de la cuenta nueva"><button type="button" data-act="acc-quick">Crear cuenta</button></div></details>
@@ -780,7 +789,7 @@ function vBancos(){const[,t]=yr();const m=balances(S,null,t,"cie:"+S.year),accs=
   return`<div class="head"><h1>Bancos y caja</h1><div class="row"><button class="pri" data-act="mov-new">Nuevo movimiento</button><label class="btn" style="flex-direction:row;color:var(--ink);font-weight:500;font-size:14px;cursor:pointer">Conciliar con extracto (CSV)<input id="csv-bank" type="file" accept=".csv,text/csv,text/plain" style="display:none"></label><button data-act="bank-new">Añadir cuenta bancaria</button></div></div>
   <div class="kpis">${accs.map(a=>{const b=m[a.code]||{d:0,c:0};return`<button class="kpi" style="text-align:left;${a.code===ui.bank?"border-color:var(--accent);border-width:2px":""}" data-act="bank" data-acc="${a.code}"><span>${esc(a.name)}</span><b>${eur(r2(b.d-b.c))}</b></button>`;}).join("")}</div>
   <div class="card"><h2>Movimientos de ${esc(accName(ui.bank))}</h2><div class="tw"><table><tr><th>Fecha</th><th>Concepto</th><th class="n">Entrada</th><th class="n">Salida</th><th class="n">Saldo</th><th class="n">Punteado</th></tr>${rows.reverse().join("")}</table></div><p class="small muted">Marca cada movimiento al comprobarlo con el extracto del banco. Saldo punteado: <b>${eur(okS)}</b> · sin puntear: <b>${pend}</b> movimientos. El saldo punteado debe coincidir con el del extracto. Para conciliar de golpe, sube el extracto del banco en CSV con columnas fecha; concepto; importe: se puntean solos los movimientos con el mismo importe y fecha cercana (5 días).</p></div>`;}
-function movForm(){modal(`<form class="dlg sm" data-form="mov"><h2>Nuevo movimiento</h2><div class="form"><label>Cuenta<select id="m-bank">${bankOpts(ui.bank)}</select></label><label>Fecha<input id="m-date" type="date" required value="${TODAY}"></label>
+function movForm(){modal(`<form class="dlg sm" data-form="mov"><h2>Nuevo movimiento</h2><div class="form"><label>Cuenta<select id="m-bank">${bankOpts(ui.bank)}</select></label><label>Fecha<input id="m-date" type="date" required value="${WD()}"></label>
   <label>Tipo<select id="m-type"><option value="out">Salida (pago)</option><option value="in">Entrada (cobro)</option></select></label><label>Importe<input id="m-amount" type="number" step="any" min="0.01" required></label>
   <label>Concepto<input id="m-concept" required></label><label>Contrapartida<select id="m-acc">${accOpts(a=>a.code.slice(0,2)!=="57",x6("626"))}</select></label></div>
   <p class="small muted">Para cobros y pagos de facturas usa el botón Cobrar o Pagar de la factura. Aquí van nóminas, impuestos, comisiones, préstamos o aportaciones.</p>
@@ -846,6 +855,7 @@ document.addEventListener("click",ev=>{const b=ev.target.closest("[data-act]");i
   {const en=S.entries.find(x=>x.id===id),yr_=S.year+"-12-31",dueC=S.contracts.filter(c=>c.next&&c.next<=TODAY).map(c=>c.next).sort()[0],cy=b.dataset.y?b.dataset.y+"-12-31":null;
    const L={"inv-unpay":()=>[inv&&inv.paid],"inv-del":()=>[inv&&inv.date,inv&&inv.paid],"ent-del":()=>[en&&en.date],"iva-post":()=>[yr_],"iva-undo":()=>[yr_],"dep-post":()=>[yr_],"payroll-post":()=>[yr_],"contracts-run":()=>[dueC],"year-close":()=>[yr_],"year-open":()=>[yr_],"cl-close":()=>[cy],"cl-update":()=>[cy],"cl-undo":()=>[cy],"cl-def":()=>[]}[a];
    const bad=L&&L().find(isLocked);if(bad){modal(`<div class="dlg sm"><h2>Ejercicio cerrado</h2><p>${lockMsg(bad)}</p><div class="row" style="justify-content:flex-end"><a class="btn" href="#cierre" style="text-decoration:none">Cierre y apertura</a><button data-act="close">Cerrar</button></div></div>`);return;}}
+  if(a==="yr"){S.year=+b.dataset.y;ui.from=null;save();render();return;}
   if(a==="cl-close"){const y=+b.dataset.y;ask("Se cerrará "+y+" a 31/12/"+y+" y se abrirá "+(y+1)+" el 01/01/"+(y+1)+" con los saldos que hay ahora. Quedará como cierre provisional: podrás actualizarlo cuando termines de registrar "+y+".","Cerrar y abrir",()=>closeYear(S,y));return;}
   if(a==="cl-update"){const y=+b.dataset.y;closeYear(S,y);save();render();modal(`<div class="dlg sm"><h2>Cierre de ${y} actualizado</h2><p>Se han rehecho la regularización y el cierre a 31/12/${y} y la apertura a 01/01/${y+1} con los saldos actuales.</p><div class="row" style="justify-content:flex-end"><button data-act="close">Cerrar</button></div></div>`);return;}
   if(a==="cl-undo"){const y=+b.dataset.y;ask("Se borrarán la regularización, el cierre de "+y+" y la apertura de "+(y+1)+".","Deshacer",()=>undoClose(S,y));return;}
@@ -897,7 +907,7 @@ document.addEventListener("click",ev=>{const b=ev.target.closest("[data-act]");i
   else if(a==="year-close")ask("Se crearán tres asientos: regularización de ingresos y gastos y cierre a 31/12/"+S.year+", y apertura a 01/01/"+(S.year+1)+". Quedará como cierre provisional: podrás actualizarlo o deshacerlo en Cierre y apertura.","Cerrar ejercicio",()=>closeYear(S,S.year));
   else if(a==="year-open"){undoClose(S,S.year);save();render();}
   else if(a==="dep-post"){const n=postDep(S,S.year);save();render();modal(`<div class="dlg sm"><h2>Amortización ${S.year}</h2><p>${n?n+" asientos de amortización contabilizados a 31/12/"+S.year+".":"No hay cuota que amortizar este año."}</p><div class="row" style="justify-content:flex-end"><button data-act="close">Cerrar</button></div></div>`);}
-  else if(a==="asset-new")modal(`<form class="dlg sm" data-form="asset"><h2>Nuevo activo fijo</h2><div class="form"><label>Descripción<input id="x-name" required></label><label>Fecha de alta<input id="x-date" type="date" required value="${TODAY}"></label><label>Coste (sin IVA)<input id="x-cost" type="number" step="any" min="0.01" required></label><label>Vida útil (años)<input id="x-years" type="number" step="1" min="1" required value="4"></label><label>Cuenta<select id="x-acc">${accOpts(c=>c.code[0]==="2"&&c.code.slice(0,2)!=="28",x6("217"))}</select></label></div><div class="row" style="justify-content:flex-end"><button type="button" data-act="close">Cancelar</button><button class="pri">Guardar</button></div></form>`);
+  else if(a==="asset-new")modal(`<form class="dlg sm" data-form="asset"><h2>Nuevo activo fijo</h2><div class="form"><label>Descripción<input id="x-name" required></label><label>Fecha de alta<input id="x-date" type="date" required value="${WD()}"></label><label>Coste (sin IVA)<input id="x-cost" type="number" step="any" min="0.01" required></label><label>Vida útil (años)<input id="x-years" type="number" step="1" min="1" required value="4"></label><label>Cuenta<select id="x-acc">${accOpts(c=>c.code[0]==="2"&&c.code.slice(0,2)!=="28",x6("217"))}</select></label></div><div class="row" style="justify-content:flex-end"><button type="button" data-act="close">Cancelar</button><button class="pri">Guardar</button></div></form>`);
   else if(a==="asset-del")ask("Se borrará el activo y sus asientos de amortización.","Borrar",()=>{S.entries=S.entries.filter(e=>!e.src.startsWith("amo:"+id+":"));S.assets=S.assets.filter(x=>x.id!==id);});
   else if(a==="doc-tab"){ui.doc[b.dataset.side]=b.dataset.type;render();}
   else if(a==="doc-new")docForm(b.dataset.side);
@@ -908,7 +918,7 @@ document.addEventListener("click",ev=>{const b=ev.target.closest("[data-act]");i
   else if(a==="crud-edit")crudForm(b.dataset.name,id);
   else if(a==="crud-del"){const k=CR[b.dataset.name].key;ask("Se borrará este registro.","Borrar",()=>{S[k]=S[k].filter(x=>x.id!==id);if(k==="items")S.moves=S.moves.filter(m=>m.itemId!==id);});}
   else if(a==="stock-adj"||a==="build"){const it=S.items.find(x=>x.id===id),bd=a==="build";modal(`<form class="dlg sm" data-form="${bd?"build":"stock"}"><h2>${bd?"Fabricar":"Ajustar stock de"} ${esc(it.name)}</h2><input type="hidden" id="q-id" value="${id}">${bd?`<p class="small muted">Escandallo por unidad: ${esc(it.bom)}</p>`:""}
-    <div class="form"><label>${bd?"Unidades a fabricar":"Cantidad (negativa para salida)"}<input id="q-qty" type="number" step="any" required ${bd?'min="0.01"':""}></label><label>Fecha<input id="q-date" type="date" required value="${TODAY}"></label>${bd?"":`<label>Motivo<input id="q-ref" required value="Regularización de inventario"></label>`}</div><div class="err" id="f-err"></div><div class="row" style="justify-content:flex-end"><button type="button" data-act="close">Cancelar</button><button class="pri">Guardar</button></div></form>`);}
+    <div class="form"><label>${bd?"Unidades a fabricar":"Cantidad (negativa para salida)"}<input id="q-qty" type="number" step="any" required ${bd?'min="0.01"':""}></label><label>Fecha<input id="q-date" type="date" required value="${WD()}"></label>${bd?"":`<label>Motivo<input id="q-ref" required value="Regularización de inventario"></label>`}</div><div class="err" id="f-err"></div><div class="row" style="justify-content:flex-end"><button type="button" data-act="close">Cancelar</button><button class="pri">Guardar</button></div></form>`);}
   else if(a==="contracts-run"){const n=runContracts(S,TODAY);save();render();modal(`<div class="dlg sm"><h2>Facturación periódica</h2><p>${n?n+" facturas creadas y contabilizadas.":"No hay contratos con factura pendiente a día de hoy."}</p><div class="row" style="justify-content:flex-end"><button data-act="close">Cerrar</button></div></div>`);}
   else if(a==="payroll-post"){const m=+$("#pay-month").value,e=postPayroll(S,S.year,m);save();render();modal(`<div class="dlg sm"><h2>Nóminas ${MES[m-1]} ${S.year}</h2><p>${e?"Asiento creado por un bruto de "+eur(e.lines[0].d)+". Si ya existía, se ha sustituido.":"No hay empleados con salario."}</p><div class="row" style="justify-content:flex-end"><button data-act="close">Cerrar</button></div></div>`);}
   else if(a==="print"){try{window.print();}catch(e){}}
@@ -925,7 +935,8 @@ document.addEventListener("click",ev=>{const b=ev.target.closest("[data-act]");i
 document.addEventListener("submit",ev=>{ev.preventDefault();const k=ev.target.dataset.form,v=id=>$("#"+id).value.trim();
   {const g=id=>{const e=$("#"+id);return e?e.value:null;},ie=S.invoices.find(i=>i.id===+(g("f-id")||g("p-id")||0)),ee=S.entries.find(x=>x.id===+(g("e-id")||0));
    const ds={entry:[g("e-date"),ee&&ee.date],invoice:[g("f-date"),ie&&ie.date,ie&&ie.paid],pay:[g("p-date"),ie&&ie.paid],mov:[g("m-date")]}[k];
-   const bad=ds&&ds.find(isLocked);if(bad){fail(lockMsg(bad));return;}}
+   const bad=ds&&ds.find(isLocked);if(bad){fail(lockMsg(bad));return;}
+   const nd=ds&&ds[0];if(nd&&+nd.slice(0,4)!==S.year){fail("La fecha es de "+nd.slice(0,4)+" y estás trabajando en el ejercicio "+S.year+". Cambia de ejercicio en las pestañas del menú o corrige la fecha.");return;}}
   if(k==="invoice")saveInvoice();
   else if(k==="pay"){payInvoice(S,S.invoices.find(i=>i.id===+v("p-id")),v("p-date"),v("p-bank"));done();}
   else if(k==="contact"){const foreign=$("#c-foreign").checked,nif=foreign?v("c-nif"):nifNorm(v("c-nif")),e=nifErr(nif,foreign);if(e)return fail(e);
